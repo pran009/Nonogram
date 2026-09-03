@@ -14,11 +14,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Nonogram">
 
-        <!-- AdMob application id. This is Google's official SAMPLE/TEST id.
-             Replace with your own from the AdMob console before publishing. See AdIds.kt. -->
+        <!-- AdMob application id for this app (from the AdMob console). -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-4687296311300202~4417705771" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

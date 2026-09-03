@@ -21,9 +21,9 @@ object AdIds {
     private const val TEST_BANNER = "ca-app-pub-3940256099942544/6300978111"
     private const val TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917"
 
-    // TODO: paste your real ad unit ids here before publishing.
-    private const val releaseBanner = "ca-app-pub-3940256099942544/6300978111"
-    private const val releaseRewarded = "ca-app-pub-3940256099942544/5224354917"
+    // Real ad unit ids from the AdMob console. Used by release builds only.
+    private const val releaseBanner = "ca-app-pub-4687296311300202/5492832921"
+    private const val releaseRewarded = "ca-app-pub-4687296311300202/6381524138"
 
     val banner: String get() = if (BuildConfig.DEBUG) TEST_BANNER else releaseBanner
     val rewarded: String get() = if (BuildConfig.DEBUG) TEST_REWARDED else releaseRewarded
