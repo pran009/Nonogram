@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.PuzzlePack
 import app.nonogram.puzzle.data.Puzzles
+import app.nonogram.puzzle.logic.ChallengeDifficulty
 import app.nonogram.puzzle.logic.PuzzleGenerator
 import app.nonogram.puzzle.model.Puzzle
 import kotlinx.coroutines.Dispatchers
@@ -30,9 +31,12 @@ import kotlinx.coroutines.withContext
 
 sealed interface Screen {
     data object Home : Screen
+    data object Collection : Screen
     data class Pack(val pack: PuzzlePack) : Screen
     data class Game(val puzzle: Puzzle, val title: String, val pack: PuzzlePack?) : Screen
     data class Generating(val id: String, val name: String, val size: Int, val seed: Long) : Screen
+    data class ChallengeGen(val seed: Long) : Screen
+    data class ChallengeGame(val puzzle: Puzzle, val difficulty: ChallengeDifficulty) : Screen
 }
 
 /** Tiny back-stack based navigation; there are only three screens so a nav library is not worth it. */
@@ -57,7 +61,10 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
             onOpenPack = { push(Screen.Pack(it)) },
             onPlayDaily = { day -> push(Screen.Generating(dailyPuzzleId(day), "Daily puzzle", 10, 7_919L * day + 12_345L)) },
             onPlayRandom = { size, seed -> push(Screen.Generating("random-$size-$seed", "Random ${size}×$size", size, seed)) },
+            onPlayChallenge = { push(Screen.ChallengeGen(System.nanoTime())) },
+            onOpenCollection = { push(Screen.Collection) },
         )
+        Screen.Collection -> CollectionScreen(store = store, refreshKey = refreshKey, onBack = { pop() })
         is Screen.Pack -> LevelsScreen(
             pack = screen.pack,
             store = store,
@@ -102,6 +109,31 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
                 }
             }
         }
+        is Screen.ChallengeGen -> {
+            LaunchedEffect(screen) {
+                val difficulty = ChallengeDifficulty.random(screen.seed)
+                val puzzle = withContext(Dispatchers.Default) {
+                    PuzzleGenerator.generate("challenge-${screen.seed}", "Challenge", difficulty.size, screen.seed)
+                }
+                replace(Screen.ChallengeGame(puzzle, difficulty))
+            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(16.dp))
+                    Text("Dealing a Challenge…", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        is Screen.ChallengeGame -> ChallengeGameScreen(
+            puzzle = screen.puzzle,
+            difficulty = screen.difficulty,
+            store = store,
+            adManager = adManager,
+            onBack = { pop() },
+            onPlayAgain = { replace(Screen.ChallengeGen(System.nanoTime())) },
+            onOpenCollection = { replace(Screen.Collection) },
+        )
     }
 }
 

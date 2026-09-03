@@ -53,6 +53,30 @@ class ProgressStore(context: Context) {
         get() = prefs.getInt(KEY_RANDOM_SOLVED, 0)
         set(value) = prefs.edit().putInt(KEY_RANDOM_SOLVED, value).apply()
 
+    // ---- Challenge Mode / card collection -------------------------------------------------
+
+    /** Card numbers (1..39) the player has unmasked. */
+    fun unmaskedCards(): Set<Int> =
+        prefs.getStringSet(KEY_CARDS, emptySet())!!.mapNotNull { it.toIntOrNull() }.toSet()
+
+    fun isCardUnmasked(number: Int): Boolean = number.toString() in prefs.getStringSet(KEY_CARDS, emptySet())!!
+
+    /** Records a card as unmasked. Returns true if it was newly unmasked. */
+    fun unmaskCard(number: Int): Boolean {
+        val current = prefs.getStringSet(KEY_CARDS, emptySet())!!.toMutableSet()
+        val added = current.add(number.toString())
+        if (added) prefs.edit().putStringSet(KEY_CARDS, current).apply()
+        return added
+    }
+
+    var challengeGamesPlayed: Int
+        get() = prefs.getInt(KEY_CHALLENGE_GAMES, 0)
+        set(value) = prefs.edit().putInt(KEY_CHALLENGE_GAMES, value).apply()
+
+    var challengeBestScore: Int
+        get() = prefs.getInt(KEY_CHALLENGE_BEST, 0)
+        set(value) = prefs.edit().putInt(KEY_CHALLENGE_BEST, value).apply()
+
     // ---- In-progress boards ---------------------------------------------------------------
 
     class SavedBoard(val cells: List<CellState>, val seconds: Long, val mistakes: Int)
@@ -100,5 +124,8 @@ class ProgressStore(context: Context) {
         const val KEY_ADS_REMOVED = "billing.adsRemoved"
         const val KEY_HINT_CREDITS = "hints.credits"
         const val FREE_STARTER_HINTS = 3
+        const val KEY_CARDS = "challenge.cards"
+        const val KEY_CHALLENGE_GAMES = "challenge.games"
+        const val KEY_CHALLENGE_BEST = "challenge.best"
     }
 }

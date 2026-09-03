@@ -100,6 +100,28 @@ class AdManager(context: Context, private val store: ProgressStore) {
         ad.show(activity) { earned = true }
     }
 
+    /**
+     * Shows [count] rewarded ads back to back (used for escalating Challenge hints).
+     * [onProgress] reports (shownSoFar, count) as each ad completes; [onComplete] runs once all
+     * are done. If ads are removed or unavailable, it completes immediately so play never stalls.
+     */
+    fun showRewardedAds(
+        activity: Activity,
+        count: Int,
+        onProgress: (Int, Int) -> Unit = { _, _ -> },
+        onComplete: () -> Unit,
+    ) {
+        if (adsRemoved || count <= 0) { onComplete(); return }
+        fun step(done: Int) {
+            if (done >= count) { onComplete(); return }
+            showRewardedForHint(activity) {
+                onProgress(done + 1, count)
+                step(done + 1)
+            }
+        }
+        step(0)
+    }
+
     private companion object {
         const val TAG = "AdManager"
     }

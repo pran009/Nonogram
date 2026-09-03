@@ -17,6 +17,8 @@ import app.nonogram.puzzle.model.Puzzle
 class GameController(
     val puzzle: Puzzle,
     private val store: ProgressStore,
+    private val persist: Boolean = true,
+    checkMistakesOverride: Boolean? = null,
 ) {
     val cellCount = puzzle.rows * puzzle.cols
 
@@ -44,13 +46,14 @@ class GameController(
     var lastChangeWasMistake by mutableStateOf(false)
         private set
 
-    val checkMistakes: Boolean get() = store.checkMistakes
+    private val checkMistakesFlag: Boolean = checkMistakesOverride ?: store.checkMistakes
+    val checkMistakes: Boolean get() = checkMistakesFlag
 
     private val undoStack = ArrayDeque<List<Pair<Int, CellState>>>()
     private var stroke: MutableList<Pair<Int, CellState>>? = null
 
     init {
-        store.loadBoard(puzzle.id, cellCount)?.let { saved ->
+        if (persist) store.loadBoard(puzzle.id, cellCount)?.let { saved ->
             cells = saved.cells
             seconds = saved.seconds
             mistakes = saved.mistakes
@@ -158,6 +161,7 @@ class GameController(
         stroke = null
         hintCell = null
         mistakeCell = null
+        if (!persist) return
         store.markCompleted(puzzle.id, seconds)
         if (puzzle.id.startsWith("random-") || puzzle.id.startsWith("daily-")) {
             store.randomSolvedCount = store.randomSolvedCount + 1
@@ -243,11 +247,11 @@ class GameController(
     fun tick() {
         if (solved) return
         seconds++
-        if (seconds % 10 == 0L) save()
+        if (persist && seconds % 10 == 0L) save()
     }
 
     fun save() {
-        if (solved) return
+        if (solved || !persist) return
         store.saveBoard(puzzle.id, cells, seconds, mistakes)
     }
 }

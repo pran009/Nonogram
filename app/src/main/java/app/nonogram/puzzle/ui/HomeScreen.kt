@@ -68,6 +68,8 @@ fun HomeScreen(
     onOpenPack: (PuzzlePack) -> Unit,
     onPlayDaily: (epochDay: Long) -> Unit,
     onPlayRandom: (size: Int, seed: Long) -> Unit,
+    onPlayChallenge: () -> Unit,
+    onOpenCollection: () -> Unit,
 ) {
     val boardColors = LocalBoardColors.current
     var randomSize by remember { mutableIntStateOf(10) }
@@ -98,6 +100,20 @@ fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(20.dp))
+
+            val collected = remember(refreshKey) { store.unmaskedCards().size }
+            ChallengeTile(
+                collected = collected,
+                total = app.nonogram.puzzle.model.CardDeck.size,
+                onClick = onPlayChallenge,
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.TextButton(
+                onClick = onOpenCollection,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("View card collection ($collected/${app.nonogram.puzzle.model.CardDeck.size})") }
+
+            Spacer(Modifier.height(16.dp))
 
             SectionTitle("Puzzle packs")
             for (pack in Puzzles.packs) {
