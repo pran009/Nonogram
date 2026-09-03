@@ -45,14 +45,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import app.nonogram.puzzle.ads.AdManager
+import app.nonogram.puzzle.ads.BannerAd
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.model.CellState
 import app.nonogram.puzzle.model.Puzzle
 import app.nonogram.puzzle.ui.theme.LocalBoardColors
 import kotlinx.coroutines.delay
+
+private fun Context.findActivity(): Activity? {
+    var ctx: Context? = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +75,7 @@ fun GameScreen(
     puzzle: Puzzle,
     title: String,
     store: ProgressStore,
+    adManager: AdManager,
     nextPuzzle: Puzzle?,
     onBack: () -> Unit,
     onNext: (Puzzle) -> Unit,
@@ -67,8 +83,27 @@ fun GameScreen(
     val controller = remember(puzzle.id) { GameController(puzzle, store) }
     val haptics = LocalHapticFeedback.current
     val boardColors = LocalBoardColors.current
+    val context = LocalContext.current
     var showRestart by remember { mutableStateOf(false) }
     var showWin by remember { mutableStateOf(false) }
+    var showHintAd by remember { mutableStateOf(false) }
+    var hintCredits by remember { mutableStateOf(store.hintCredits) }
+
+    // Uses a hint, spending a credit. When credits run out the caller shows the rewarded-ad prompt.
+    fun spendHint() {
+        if (!adManager.adsRemoved) {
+            hintCredits -= 1
+            store.hintCredits = hintCredits
+        }
+        controller.hint()
+    }
+
+    fun onHintClicked() {
+        when {
+            adManager.adsRemoved || hintCredits > 0 -> spendHint()
+            else -> showHintAd = true
+        }
+    }
 
     // Timer
     LaunchedEffect(controller, controller.solved) {
@@ -128,6 +163,11 @@ fun GameScreen(
             ) {
                 Text("${puzzle.rows}×${puzzle.cols}", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (adManager.adsRemoved) "Hints: ∞" else "Hints: $hintCredits",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (controller.checkMistakes) {
                     Text(
                         "Mistakes: ${controller.mistakes}",
@@ -188,7 +228,7 @@ fun GameScreen(
                     FilledTonalIconButton(onClick = { controller.undo() }, enabled = controller.canUndo && !controller.solved) {
                         Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
                     }
-                    FilledTonalIconButton(onClick = { controller.hint() }, enabled = !controller.solved) {
+                    FilledTonalIconButton(onClick = { onHintClicked() }, enabled = !controller.solved) {
                         Icon(Icons.Default.Lightbulb, contentDescription = "Hint")
                     }
                     FilledTonalIconButton(onClick = { showRestart = true }) {
@@ -196,6 +236,8 @@ fun GameScreen(
                     }
                 }
             }
+
+            BannerAd(adManager, Modifier.padding(bottom = 4.dp))
         }
     }
 
@@ -206,6 +248,28 @@ fun GameScreen(
             text = { Text("Your progress on this puzzle will be cleared.") },
             confirmButton = { TextButton(onClick = { controller.restart(); showRestart = false }) { Text("Restart") } },
             dismissButton = { TextButton(onClick = { showRestart = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (showHintAd) {
+        val activity = context.findActivity()
+        AlertDialog(
+            onDismissRequest = { showHintAd = false },
+            title = { Text("Out of hints") },
+            text = { Text("Watch a short video to earn 3 hints and reveal a cell.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showHintAd = false
+                    if (activity != null) {
+                        adManager.showRewardedForHint(activity) {
+                            hintCredits += 3
+                            store.hintCredits = hintCredits
+                            spendHint()
+                        }
+                    }
+                }) { Text("Watch") }
+            },
+            dismissButton = { TextButton(onClick = { showHintAd = false }) { Text("Not now") } },
         )
     }
 

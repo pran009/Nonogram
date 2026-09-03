@@ -19,6 +19,17 @@ class ProgressStore(context: Context) {
         get() = prefs.getBoolean(KEY_HAPTICS, true)
         set(value) = prefs.edit().putBoolean(KEY_HAPTICS, value).apply()
 
+    /** Set true by the future "Remove ads" purchase. When true, no ads are ever shown and
+     *  hints are always free. */
+    var adsRemoved: Boolean
+        get() = prefs.getBoolean(KEY_ADS_REMOVED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ADS_REMOVED, value).apply()
+
+    /** Hints the player can spend without watching an ad. New players get a few for free. */
+    var hintCredits: Int
+        get() = prefs.getInt(KEY_HINT_CREDITS, FREE_STARTER_HINTS)
+        set(value) = prefs.edit().putInt(KEY_HINT_CREDITS, value.coerceAtLeast(0)).apply()
+
     // ---- Completion -----------------------------------------------------------------------
 
     fun isCompleted(puzzleId: String): Boolean = prefs.getBoolean("done:$puzzleId", false)
@@ -86,5 +97,8 @@ class ProgressStore(context: Context) {
         const val KEY_CHECK_MISTAKES = "settings.checkMistakes"
         const val KEY_HAPTICS = "settings.haptics"
         const val KEY_RANDOM_SOLVED = "stats.randomSolved"
+        const val KEY_ADS_REMOVED = "billing.adsRemoved"
+        const val KEY_HINT_CREDITS = "hints.credits"
+        const val FREE_STARTER_HINTS = 3
     }
 }

@@ -18,7 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import app.nonogram.puzzle.ads.AdManager
 import androidx.compose.ui.unit.dp
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.PuzzlePack
@@ -37,9 +37,7 @@ sealed interface Screen {
 
 /** Tiny back-stack based navigation; there are only three screens so a nav library is not worth it. */
 @Composable
-fun NonogramApp() {
-    val context = LocalContext.current
-    val store = remember { ProgressStore(context) }
+fun NonogramApp(store: ProgressStore, adManager: AdManager) {
     val stack = remember { mutableStateListOf<Screen>(Screen.Home) }
     // Bumped whenever we return to a list screen so cached progress values re-read.
     var refreshKey by remember { mutableIntStateOf(0) }
@@ -79,6 +77,7 @@ fun NonogramApp() {
                 puzzle = screen.puzzle,
                 title = screen.title,
                 store = store,
+                adManager = adManager,
                 nextPuzzle = next,
                 onBack = { pop() },
                 onNext = { nextPuzzle ->
