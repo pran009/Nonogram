@@ -74,8 +74,35 @@ puzzle that would require guessing.
 6. **Each update:** bump `versionCode` (must increase) and `versionName` in
    `app/build.gradle.kts`, rebuild the bundle, upload.
 
+## Monetization (AdMob)
+
+The app shows a banner ad at the bottom of the game screen and offers a rewarded video ad to
+earn hints. New players get 3 free hints; after that, tapping the hint button offers a short
+video that grants 3 more. Everything is gated behind `ProgressStore.adsRemoved`, so a future
+"Remove ads" in-app purchase only needs to call `AdManager.applyAdsRemoved(true)`.
+
+**The app currently uses Google's official TEST ad ids**, so it always shows test ads. It will
+not earn any money until you swap in your own ids. Never click your own real ads, and never
+ship real ids in a build you are still testing — AdMob bans accounts for both.
+
+To go live with ads:
+
+1. Create a free AdMob account at https://apps.admob.com and add your app.
+2. Copy your **App ID** (`ca-app-pub-XXXX~YYYY`) into `app/src/main/AndroidManifest.xml`,
+   replacing the sample value in the `com.google.android.gms.ads.APPLICATION_ID` meta-data.
+3. Create one **Banner** ad unit and one **Rewarded** ad unit. Paste their ids into
+   `releaseBanner` and `releaseRewarded` in
+   `app/src/main/java/app/nonogram/puzzle/ads/AdIds.kt`. Debug builds keep using test ids
+   automatically; release builds use your real ids.
+4. In AdMob, add your test devices so you can safely see live ads while testing.
+
+**Play Console Data safety change:** because AdMob collects an advertising identifier, you can
+no longer declare "no data collected". In the Data safety form, declare that the app collects a
+Device or other ID for Advertising, shared with Google. You will also need a privacy policy URL
+that mentions AdMob; Google provides a generator, or ask and I can draft one.
+
 ## Ideas for later
 
+- The "Remove ads" in-app purchase (Google Play Billing) — the ad flag is already in place.
 - More puzzle packs (20×20, colour nonograms).
 - Achievements / leaderboards through Google Play Games Services.
-- Rewarded hints via AdMob if you want monetisation.
