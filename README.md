@@ -1,6 +1,6 @@
 # Nonogram
 
-A native Android nonogram (picross) game built with Kotlin and Jetpack Compose, structured
+A native Android nonogram (picture logic puzzle) game built with Kotlin and Jetpack Compose, structured
 to be published on Google Play.
 
 ## Features

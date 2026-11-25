@@ -22,39 +22,45 @@ Paste that URL into Play Console → Policy → App content → Privacy policy.
 
 ## 2. Store listing
 
-**App name** (max 30): `Nonogram`
+> Trademark note: do not use "Picross" (Nintendo), "Pic-a-Pix" (Conceptis) or "Griddlers"
+> anywhere in the title, description or tags. They are other companies' brand names.
+
+**App name** (max 30): `Nonogram With Challenges`
 
 **Short description** (max 80):
 ```
-Picture logic puzzles. Solve nonograms with clean, no-guessing gameplay.
+Logic picture puzzles: solve nonograms, take on challenges, collect 39 cards.
 ```
 
 **Full description** (max 4000):
 ```
-Nonogram is a relaxing picture logic puzzle, also known as picross or griddlers. Use the
-number clues on each row and column to work out which squares to fill, and a hidden picture
-appears.
+Nonogram is a relaxing logic puzzle game where every grid hides a picture. Use the number clues on each row and column to work out which squares to fill, and watch the image appear. This classic puzzle is also known as hanjie, picture cross or Japanese crossword — and every puzzle can be solved by pure logic, so you never have to guess.
 
-Every puzzle is solvable by pure logic — you never have to guess. That includes the random
-puzzles, which are checked by a solver before you ever see them.
+CHALLENGE MODE & COLLECTIBLE CARDS
+Take on randomly dealt puzzles in Easy, Difficult or Very Difficult and win a collectible card every time you solve one. The faster you finish and the fewer mistakes you make, the rarer the card. Start with common critters and work your way up to the legendary Ancient Dragon — 39 cards to collect, each one hidden until you earn it.
+
+DAILY PUZZLE & ENDLESS PLAY
+A fresh daily puzzle every day, plus unlimited random puzzles in three sizes. Every generated puzzle is checked by a solver, so it is always fair.
+
+EASY TO LEARN
+A short interactive tutorial teaches you the rules with a practice puzzle you play yourself. Skip it any time if you already know how nonograms work.
 
 FEATURES
-• 32 hand-made puzzles in three sizes: 5×5, 10×10 and 15×15
-• A new daily puzzle every day
-• Unlimited random puzzles, always logically solvable
-• Simple controls: tap or drag to fill, switch to cross out squares
-• Pinch to zoom and pan on bigger boards
-• Undo, smart hints, and a timer with your best times
-• Optional mistake checking, or free play with no penalties
+• 32 hand-crafted picture puzzles in 5x5, 10x10 and 15x15
+• Challenge Mode with 39 collectible cards
+• Daily puzzle and unlimited random puzzles
+• Tap or drag to fill, cross out empty squares, pinch to zoom
+• Undo, hints and a timer with your best times
+• Optional mistake checking, or relaxed free play
 • Light and dark themes
-• Works fully offline
+• Share your results with friends
+• Works fully offline — no internet needed, no sign-up
 
-Whether you have two minutes or an hour, Nonogram is an easy game to pick up and a satisfying
-one to master. No sign-up, no clutter — just you and the puzzle.
+A satisfying brain workout for logic and reasoning, focus and problem solving. If you enjoy number puzzles, grid puzzles, pixel art puzzles, brain teasers or classic number logic games, you will love Nonogram.
 ```
 
 **App category:** Games → Puzzle
-**Tags:** nonogram, picross, logic puzzle, griddler
+**Tags (pick from Play's list):** Brain games, Logic, Puzzle, Casual, Offline
 **Contact email:** pran009@gmail.com
 
 **Graphics to upload (in this folder):**
