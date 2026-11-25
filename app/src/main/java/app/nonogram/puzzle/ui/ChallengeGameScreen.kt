@@ -20,6 +20,8 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Square
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
@@ -62,12 +64,6 @@ import app.nonogram.puzzle.model.Puzzle
 import app.nonogram.puzzle.ui.theme.LocalBoardColors
 import kotlinx.coroutines.delay
 
-private fun Context.activity(): Activity? {
-    var c: Context? = this
-    while (c is ContextWrapper) { if (c is Activity) return c; c = c.baseContext }
-    return null
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChallengeGameScreen(
@@ -95,8 +91,16 @@ fun ChallengeGameScreen(
     var hintPromptCost by remember { mutableStateOf<Int?>(null) }
     var adProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
-    LaunchedEffect(controller, controller.solved) {
-        while (!controller.solved) { delay(1000); controller.tick() }
+    // One-time explanation of Challenge scoring, and the leave-without-finishing guard.
+    var showTip by remember { mutableStateOf(!store.challengeTipSeen) }
+    var showLeave by remember { mutableStateOf(false) }
+
+    fun requestLeave() { if (controller.solved) onBack() else showLeave = true }
+    BackHandler(enabled = !controller.solved) { showLeave = true }
+
+    // The clock doesn't run while the first-time tip is on screen.
+    LaunchedEffect(controller, controller.solved, showTip) {
+        while (!controller.solved && !showTip) { delay(1000); controller.tick() }
     }
     LaunchedEffect(controller.lastChangeTick) {
         if (controller.lastChangeTick != 0L && store.hapticsEnabled) {
@@ -131,7 +135,7 @@ fun ChallengeGameScreen(
             TopAppBar(
                 title = { Text("Challenge · ${difficulty.label}", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = { requestLeave() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
@@ -232,7 +236,7 @@ fun ChallengeGameScreen(
             confirmButton = {
                 if (adProgress == null) {
                     Button(onClick = {
-                        val act = context.activity()
+                        val act = context.findActivity()
                         if (act != null) {
                             adProgress = 0 to cost
                             adManager.showRewardedAds(
@@ -249,6 +253,37 @@ fun ChallengeGameScreen(
             dismissButton = {
                 if (adProgress == null) TextButton(onClick = { hintPromptCost = null }) { Text("Cancel") }
             },
+        )
+    }
+
+    if (showTip) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("How Challenge works") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("• Solve the puzzle to win a collectible card.")
+                    Text("• The faster you solve and the fewer mistakes you make, the rarer the card.")
+                    Text("• Harder boards can reach the best cards.")
+                    Text("• Hints are unlocked with short ads and lower your score.")
+                    Text("• There are 39 cards. They stay hidden until you earn them.")
+                    Text("The clock starts when you tap Start.", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button(onClick = { store.challengeTipSeen = true; showTip = false }) { Text("Start") }
+            },
+        )
+    }
+
+    if (showLeave) {
+        AlertDialog(
+            onDismissRequest = { showLeave = false },
+            title = { Text("Leave this Challenge?") },
+            text = { Text("Challenge puzzles aren't saved. If you leave now you won't earn a card for this one.") },
+            confirmButton = { TextButton(onClick = { showLeave = false; onBack() }) { Text("Leave") } },
+            dismissButton = { Button(onClick = { showLeave = false }) { Text("Keep playing") } },
         )
     }
 
@@ -272,6 +307,17 @@ fun ChallengeGameScreen(
                     if (!newlyUnmasked) {
                         Text("Already in your collection", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = {
+                        shareText(
+                            context,
+                            "I scored $finalScore in Nonogram Challenge Mode and won card #${card.number}: " +
+                                "${card.name} (${card.rarity.label})! Can you beat it? $STORE_URL",
+                        )
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Share")
                     }
                 }
             },

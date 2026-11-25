@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -125,9 +127,15 @@ fun BoardCanvas(
             return r * geo.cols + c
         }
 
+        val filledCount = cells.count { it == CellState.FILLED }
         Canvas(
             Modifier
                 .fillMaxSize()
+                .semantics {
+                    contentDescription =
+                        if (solved) "Puzzle solved: ${puzzle.name}"
+                        else "Puzzle board, ${puzzle.rows} by ${puzzle.cols}. $filledCount of ${puzzle.filledCount} squares filled."
+                }
                 .pointerInput(puzzle, geo) {
                     var lastTapTime = 0L
                     awaitEachGesture {

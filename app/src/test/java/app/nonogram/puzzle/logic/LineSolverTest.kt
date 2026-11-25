@@ -52,6 +52,10 @@ class LineSolverTest {
         assertTrue("Not line-solvable: " + failures.joinToString { "${it.id}(${it.name})" }, failures.isEmpty())
     }
 
+    @Test fun tutorialPuzzleIsLineSolvable() {
+        assertTrue(LineSolver.isLineSolvable(Puzzles.tutorial))
+    }
+
     @Test fun puzzleIdsAreUnique() {
         val ids = Puzzles.packs.flatMap { it.puzzles }.map { it.id }
         assertEquals(ids.size, ids.toSet().size)

@@ -20,6 +20,12 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -70,11 +76,13 @@ fun HomeScreen(
     onPlayRandom: (size: Int, seed: Long) -> Unit,
     onPlayChallenge: () -> Unit,
     onOpenCollection: () -> Unit,
+    onShowTutorial: () -> Unit,
 ) {
-    val boardColors = LocalBoardColors.current
+    val context = LocalContext.current
     var randomSize by remember { mutableIntStateOf(10) }
     var checkMistakes by remember(refreshKey) { mutableStateOf(store.checkMistakes) }
     var haptics by remember(refreshKey) { mutableStateOf(store.hapticsEnabled) }
+    var confirmExit by remember(refreshKey) { mutableStateOf(store.confirmExit) }
     val epochDay = remember(refreshKey) { todayEpochDay() }
     val dailyDone = remember(refreshKey) { store.isCompleted(dailyPuzzleId(epochDay)) }
     val dailyStarted = remember(refreshKey) { store.hasSavedBoard(dailyPuzzleId(epochDay)) }
@@ -192,6 +200,12 @@ fun HomeScreen(
                         checked = haptics,
                         onChange = { haptics = it; store.hapticsEnabled = it },
                     )
+                    SettingRow(
+                        title = "Confirm before exiting",
+                        subtitle = "Ask before closing the app with the back button",
+                        checked = confirmExit,
+                        onChange = { confirmExit = it; store.confirmExit = it },
+                    )
                 }
             }
 
@@ -203,6 +217,23 @@ fun HomeScreen(
                     HowToLine("Tap a cell to fill it. Drag to fill a whole line. Switch to Cross to mark cells you know are empty.")
                     HowToLine("Pinch with two fingers to zoom in on large boards. Double-tap to zoom back out.")
                     HowToLine("Stuck? The hint button reveals one cell you can deduce from the current board.")
+                    androidx.compose.material3.OutlinedButton(onClick = onShowTutorial, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Show tutorial")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            SectionTitle("Help & feedback")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    LinkRow(Icons.Default.Email, "Send feedback", "Report a problem or suggest a feature") { sendFeedback(context) }
+                    LinkRow(Icons.Default.Star, "Rate Nonogram", "Enjoying it? A rating helps a lot") { openStorePage(context) }
+                    LinkRow(Icons.Default.Share, "Share with friends", "Invite someone to play") {
+                        shareText(context, "Try Nonogram — picture logic puzzles with Challenge Mode and collectible cards: $STORE_URL")
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -285,4 +316,23 @@ private fun SettingRow(title: String, subtitle: String, checked: Boolean, onChan
 @Composable
 private fun HowToLine(text: String) {
     Text(text, style = MaterialTheme.typography.bodyMedium)
+}
+
+@Composable
+private fun LinkRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }

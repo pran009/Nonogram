@@ -26,6 +26,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +52,11 @@ fun CardFace(
     val surface = MaterialTheme.colorScheme.surface
     Box(
         modifier
+            .semantics(mergeDescendants = true) {
+                contentDescription =
+                    if (unmasked) "Card ${card.number}, ${card.name}, ${card.rarity.label}"
+                    else "Locked card ${card.number}"
+            }
             .aspectRatio(0.72f)
             .clip(RoundedCornerShape(14.dp))
             .background(if (unmasked) surface else MaterialTheme.colorScheme.surfaceVariant)

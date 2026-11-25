@@ -6,9 +6,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +37,7 @@ import kotlinx.coroutines.withContext
 sealed interface Screen {
     data object Home : Screen
     data object Collection : Screen
+    data object Tutorial : Screen
     data class Pack(val pack: PuzzlePack) : Screen
     data class Game(val puzzle: Puzzle, val title: String, val pack: PuzzlePack?) : Screen
     data class Generating(val id: String, val name: String, val size: Int, val seed: Long) : Screen
@@ -42,9 +48,14 @@ sealed interface Screen {
 /** Tiny back-stack based navigation; there are only three screens so a nav library is not worth it. */
 @Composable
 fun NonogramApp(store: ProgressStore, adManager: AdManager) {
-    val stack = remember { mutableStateListOf<Screen>(Screen.Home) }
+    // First launch opens the tutorial on top of Home, so finishing it lands on the home screen.
+    val stack = remember {
+        mutableStateListOf<Screen>(Screen.Home).apply { if (!store.tutorialSeen) add(Screen.Tutorial) }
+    }
     // Bumped whenever we return to a list screen so cached progress values re-read.
     var refreshKey by remember { mutableIntStateOf(0) }
+    var showExit by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     fun pop() {
         if (stack.size > 1) { stack.removeAt(stack.lastIndex); refreshKey++ }
@@ -53,8 +64,23 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
     fun replace(s: Screen) { stack[stack.lastIndex] = s }
 
     BackHandler(enabled = stack.size > 1) { pop() }
+    // Back on the home screen: confirm before closing (setting can turn this off).
+    BackHandler(enabled = stack.size == 1) {
+        if (store.confirmExit) showExit = true else context.findActivity()?.finish()
+    }
+
+    if (showExit) {
+        AlertDialog(
+            onDismissRequest = { showExit = false },
+            title = { Text("Exit Nonogram?") },
+            text = { Text("Your puzzle progress is saved.") },
+            confirmButton = { TextButton(onClick = { showExit = false; context.findActivity()?.finish() }) { Text("Exit") } },
+            dismissButton = { Button(onClick = { showExit = false }) { Text("Cancel") } },
+        )
+    }
 
     when (val screen = stack.last()) {
+        Screen.Tutorial -> TutorialScreen(store = store, onDone = { pop() })
         Screen.Home -> HomeScreen(
             store = store,
             refreshKey = refreshKey,
@@ -63,6 +89,7 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
             onPlayRandom = { size, seed -> push(Screen.Generating("random-$size-$seed", "Random ${size}×$size", size, seed)) },
             onPlayChallenge = { push(Screen.ChallengeGen(System.nanoTime())) },
             onOpenCollection = { push(Screen.Collection) },
+            onShowTutorial = { push(Screen.Tutorial) },
         )
         Screen.Collection -> CollectionScreen(store = store, refreshKey = refreshKey, onBack = { pop() })
         is Screen.Pack -> LevelsScreen(

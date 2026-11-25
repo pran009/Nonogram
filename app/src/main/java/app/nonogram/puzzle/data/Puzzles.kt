@@ -328,6 +328,13 @@ object Puzzles {
 
     val packs: List<PuzzlePack> = listOf(pack5, pack10, pack15)
 
+    /** Tiny practice board used by the first-launch tutorial (not part of any pack). */
+    val tutorial: Puzzle = p("t01", "Gem",
+        ".##.",
+        "####",
+        "####",
+        ".##.")
+
     fun byId(id: String): Puzzle? =
         packs.asSequence().flatMap { it.puzzles.asSequence() }.firstOrNull { it.id == id }
 }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Square
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
@@ -59,15 +60,6 @@ import app.nonogram.puzzle.model.CellState
 import app.nonogram.puzzle.model.Puzzle
 import app.nonogram.puzzle.ui.theme.LocalBoardColors
 import kotlinx.coroutines.delay
-
-private fun Context.findActivity(): Activity? {
-    var ctx: Context? = this
-    while (ctx is ContextWrapper) {
-        if (ctx is Activity) return ctx
-        ctx = ctx.baseContext
-    }
-    return null
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -300,6 +292,17 @@ fun GameScreen(
                     if (details.isNotEmpty()) {
                         Text(details.joinToString(" · "), style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = {
+                        shareText(
+                            context,
+                            "I solved \"${puzzle.name}\" (${puzzle.rows}×${puzzle.cols}) in " +
+                                "${formatTime(controller.seconds)} on Nonogram! Can you beat it? $STORE_URL",
+                        )
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Share")
                     }
                 }
             },

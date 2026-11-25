@@ -19,6 +19,21 @@ class ProgressStore(context: Context) {
         get() = prefs.getBoolean(KEY_HAPTICS, true)
         set(value) = prefs.edit().putBoolean(KEY_HAPTICS, value).apply()
 
+    /** Ask "Exit Nonogram?" when pressing back on the home screen. */
+    var confirmExit: Boolean
+        get() = prefs.getBoolean(KEY_CONFIRM_EXIT, true)
+        set(value) = prefs.edit().putBoolean(KEY_CONFIRM_EXIT, value).apply()
+
+    /** First-launch tutorial has been completed or skipped. */
+    var tutorialSeen: Boolean
+        get() = prefs.getBoolean(KEY_TUTORIAL_SEEN, false)
+        set(value) = prefs.edit().putBoolean(KEY_TUTORIAL_SEEN, value).apply()
+
+    /** The one-time "how Challenge scoring works" tip has been shown. */
+    var challengeTipSeen: Boolean
+        get() = prefs.getBoolean(KEY_CHALLENGE_TIP_SEEN, false)
+        set(value) = prefs.edit().putBoolean(KEY_CHALLENGE_TIP_SEEN, value).apply()
+
     /** Set true by the future "Remove ads" purchase. When true, no ads are ever shown and
      *  hints are always free. */
     var adsRemoved: Boolean
@@ -127,5 +142,8 @@ class ProgressStore(context: Context) {
         const val KEY_CARDS = "challenge.cards"
         const val KEY_CHALLENGE_GAMES = "challenge.games"
         const val KEY_CHALLENGE_BEST = "challenge.best"
+        const val KEY_CONFIRM_EXIT = "settings.confirmExit"
+        const val KEY_TUTORIAL_SEEN = "onboarding.tutorialSeen"
+        const val KEY_CHALLENGE_TIP_SEEN = "onboarding.challengeTipSeen"
     }
 }
