@@ -68,7 +68,7 @@ A satisfying brain workout for logic and reasoning, focus and problem solving. I
 |---|---|---|
 | App icon | `icon-512.png` | 512×512 |
 | Feature graphic | `feature-graphic-1024x500.png` | 1024×500 |
-| Phone screenshots | you capture these | see below |
+| Phone screenshots | `screenshots/01-…06-*.png` (captioned, 1080×2100) | 6 files |
 
 **Screenshots:** Play requires at least 2 phone screenshots (min 320px, 16:9 or 9:16).
 Capture them from the running app — the home screen, a puzzle in progress, and a solved
