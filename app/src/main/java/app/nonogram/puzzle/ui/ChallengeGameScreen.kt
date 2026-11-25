@@ -98,9 +98,11 @@ fun ChallengeGameScreen(
     fun requestLeave() { if (controller.solved) onBack() else showLeave = true }
     BackHandler(enabled = !controller.solved) { showLeave = true }
 
-    // The clock doesn't run while the first-time tip is on screen.
-    LaunchedEffect(controller, controller.solved, showTip) {
-        while (!controller.solved && !showTip) { delay(1000); controller.tick() }
+    // The clock is paused while the first-time tip, the hint prompt, or hint ads are on screen,
+    // so watching ads never costs the player time (and therefore score).
+    val clockPaused = showTip || hintPromptCost != null
+    LaunchedEffect(controller, controller.solved, clockPaused) {
+        while (!controller.solved && !clockPaused) { delay(1000); controller.tick() }
     }
     LaunchedEffect(controller.lastChangeTick) {
         if (controller.lastChangeTick != 0L && store.hapticsEnabled) {
@@ -114,7 +116,7 @@ fun ChallengeGameScreen(
     }
     LaunchedEffect(controller.solved) {
         if (controller.solved) {
-            val score = ChallengeScoring.score(difficulty, controller.seconds, controller.mistakes, controller.hintsUsed)
+            val score = ChallengeScoring.score(difficulty, controller.seconds, controller.mistakes)
             val card = CardDeck.cardForScore(score)
             finalScore = score
             newlyUnmasked = store.unmaskCard(card.number)
@@ -218,7 +220,6 @@ fun ChallengeGameScreen(
 
     // Hint prompt: watch N ads to unlock.
     hintPromptCost?.let { cost ->
-        val penalty = difficulty.hintPenalty
         AlertDialog(
             onDismissRequest = { if (adProgress == null) hintPromptCost = null },
             title = { Text("Unlock a hint") },
@@ -229,7 +230,7 @@ fun ChallengeGameScreen(
                 } else {
                     Text(
                         "Watch ${if (cost == 1) "1 ad" else "$cost ads"} to reveal one square." +
-                            "\n\nHeads up: each hint lowers your Challenge score by $penalty points."
+                            "\n\nThe clock is paused while you watch."
                     )
                 }
             },
@@ -265,7 +266,7 @@ fun ChallengeGameScreen(
                     Text("• Solve the puzzle to win a collectible card.")
                     Text("• The faster you solve and the fewer mistakes you make, the rarer the card.")
                     Text("• Harder boards can reach the best cards.")
-                    Text("• Hints are unlocked with short ads and lower your score.")
+                    Text("• Stuck? Hints are unlocked with short ads.")
                     Text("• There are 39 cards. They stay hidden until you earn them.")
                     Text("The clock starts when you tap Start.", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)

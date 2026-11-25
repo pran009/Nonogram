@@ -7,9 +7,8 @@ package app.nonogram.puzzle.logic
  *       + secondsUnderPar * underRate
  *       - secondsOverPar * overRate
  *       - errors * errorPenalty
- *       - hints * hintPenalty
  *       + (errors == 0 ? nilBonus : 0)
- * floored at 0.
+ * floored at 0. Hints never affect the score; their only cost is the rewarded ads.
  */
 enum class ChallengeDifficulty(
     val code: String,
@@ -21,11 +20,10 @@ enum class ChallengeDifficulty(
     val overRate: Double,
     val errorPenalty: Int,
     val nilBonus: Int,
-    val hintPenalty: Int,
 ) {
-    EASY("E", "Easy", 5, base = 100, parSeconds = 20, underRate = 3.0, overRate = 2.0, errorPenalty = 2, nilBonus = 20, hintPenalty = 15),
-    HARD("D", "Difficult", 10, base = 150, parSeconds = 150, underRate = 1.0, overRate = 1.0, errorPenalty = 4, nilBonus = 40, hintPenalty = 25),
-    EXPERT("X", "Very Difficult", 15, base = 200, parSeconds = 420, underRate = 0.5, overRate = 0.5, errorPenalty = 5, nilBonus = 60, hintPenalty = 40);
+    EASY("E", "Easy", 5, base = 100, parSeconds = 20, underRate = 3.0, overRate = 2.0, errorPenalty = 2, nilBonus = 20),
+    HARD("D", "Difficult", 10, base = 150, parSeconds = 150, underRate = 1.0, overRate = 1.0, errorPenalty = 4, nilBonus = 40),
+    EXPERT("X", "Very Difficult", 15, base = 200, parSeconds = 420, underRate = 0.5, overRate = 0.5, errorPenalty = 5, nilBonus = 60);
 
     companion object {
         /** Deterministic random pick for a given seed, so a round is reproducible. */
@@ -42,13 +40,11 @@ object ChallengeScoring {
         difficulty: ChallengeDifficulty,
         seconds: Long,
         mistakes: Int,
-        hints: Int,
     ): Int {
         var s = difficulty.base.toDouble()
         val diff = difficulty.parSeconds - seconds
         s += if (diff >= 0) diff * difficulty.underRate else diff * difficulty.overRate
         s -= mistakes * difficulty.errorPenalty
-        s -= hints * difficulty.hintPenalty
         if (mistakes == 0) s += difficulty.nilBonus
         return s.toInt().coerceAtLeast(0)
     }

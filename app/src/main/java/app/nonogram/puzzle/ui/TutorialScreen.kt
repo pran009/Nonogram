@@ -69,7 +69,8 @@ fun TutorialScreen(store: ProgressStore, onDone: () -> Unit) {
                 .padding(padding)
                 .padding(horizontal = 24.dp, vertical = 12.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Fixed height so the header doesn't shift when Skip disappears on the last step.
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Step ${step + 1} of $STEP_COUNT", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.weight(1f))
