@@ -2,6 +2,7 @@ package app.nonogram.puzzle.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.nonogram.puzzle.logic.LadderState
 import app.nonogram.puzzle.model.CellState
 
 /** Small SharedPreferences wrapper for progress, settings, and in-progress boards. */
@@ -59,6 +60,7 @@ class ProgressStore(context: Context) {
             .putLong("best:$puzzleId", if (best == null || seconds < best) seconds else best)
             .remove("state:$puzzleId")
             .remove("time:$puzzleId")
+            .remove("lines:$puzzleId")
             .apply()
     }
 
@@ -132,7 +134,67 @@ class ProgressStore(context: Context) {
 
     fun hasSavedBoard(puzzleId: String): Boolean = prefs.contains("state:$puzzleId")
 
+    // ---- Coins, XP and unlocks ------------------------------------------------------------
+
+    var coins: Int
+        get() = prefs.getInt(KEY_COINS, 0)
+        set(value) = prefs.edit().putInt(KEY_COINS, value.coerceAtLeast(0)).apply()
+
+    var xp: Int
+        get() = prefs.getInt(KEY_XP, 0)
+        set(value) = prefs.edit().putInt(KEY_XP, value.coerceAtLeast(0)).apply()
+
+    fun isPackUnlocked(packId: String): Boolean = packId in prefs.getStringSet(KEY_UNLOCKED_PACKS, emptySet())!!
+
+    fun unlockPack(packId: String) {
+        val set = prefs.getStringSet(KEY_UNLOCKED_PACKS, emptySet())!!.toMutableSet().apply { add(packId) }
+        prefs.edit().putStringSet(KEY_UNLOCKED_PACKS, set).apply()
+    }
+
+    fun isPackBonusPaid(packId: String): Boolean = packId in prefs.getStringSet(KEY_PACK_BONUS, emptySet())!!
+
+    fun markPackBonusPaid(packId: String) {
+        val set = prefs.getStringSet(KEY_PACK_BONUS, emptySet())!!.toMutableSet().apply { add(packId) }
+        prefs.edit().putStringSet(KEY_PACK_BONUS, set).apply()
+    }
+
+    var ladder: LadderState
+        get() = LadderState(
+            day = prefs.getLong(KEY_LADDER_DAY, 0L),
+            laddersDone = prefs.getInt(KEY_LADDER_DONE, 0),
+            step = prefs.getInt(KEY_LADDER_STEP, 0),
+            unlockAtMs = prefs.getLong(KEY_LADDER_UNLOCK, 0L),
+        )
+        set(value) = prefs.edit()
+            .putLong(KEY_LADDER_DAY, value.day)
+            .putInt(KEY_LADDER_DONE, value.laddersDone)
+            .putInt(KEY_LADDER_STEP, value.step)
+            .putLong(KEY_LADDER_UNLOCK, value.unlockAtMs)
+            .apply()
+
+    /**
+     * Rows/columns ("r3", "c7") that already paid a line coin for this puzzle. Kept across undo,
+     * restart and reopening so a line can never pay twice. Cleared once the puzzle is solved,
+     * because a solved puzzle never pays line coins again.
+     */
+    fun paidLines(puzzleId: String): Set<String> =
+        prefs.getString("lines:$puzzleId", null)?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+
+    fun addPaidLines(puzzleId: String, lines: Collection<String>) {
+        if (lines.isEmpty()) return
+        val all = paidLines(puzzleId) + lines
+        prefs.edit().putString("lines:$puzzleId", all.joinToString(",")).apply()
+    }
+
     private companion object {
+        const val KEY_COINS = "wallet.coins"
+        const val KEY_XP = "wallet.xp"
+        const val KEY_UNLOCKED_PACKS = "packs.unlocked"
+        const val KEY_PACK_BONUS = "packs.bonusPaid"
+        const val KEY_LADDER_DAY = "ladder.day"
+        const val KEY_LADDER_DONE = "ladder.done"
+        const val KEY_LADDER_STEP = "ladder.step"
+        const val KEY_LADDER_UNLOCK = "ladder.unlockAt"
         const val KEY_CHECK_MISTAKES = "settings.checkMistakes"
         const val KEY_HAPTICS = "settings.haptics"
         const val KEY_RANDOM_SOLVED = "stats.randomSolved"

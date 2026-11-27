@@ -19,6 +19,8 @@ class GameController(
     private val store: ProgressStore,
     private val persist: Boolean = true,
     checkMistakesOverride: Boolean? = null,
+    /** Called with rows/columns ("r3", "c7") that just became correct. Used for line coins. */
+    private val onLinesCorrect: (List<String>) -> Unit = {},
 ) {
     val cellCount = puzzle.rows * puzzle.cols
 
@@ -52,6 +54,9 @@ class GameController(
     private val undoStack = ArrayDeque<List<Pair<Int, CellState>>>()
     private var stroke: MutableList<Pair<Int, CellState>>? = null
 
+    /** Lines currently matching the solution; only changes trigger [onLinesCorrect]. */
+    private var correctLines: Set<String> = emptySet()
+
     init {
         if (persist) store.loadBoard(puzzle.id, cellCount)?.let { saved ->
             cells = saved.cells
@@ -59,6 +64,24 @@ class GameController(
             mistakes = saved.mistakes
             checkSolved()
         }
+        correctLines = computeCorrectLines()
+    }
+
+    /**
+     * Rows and columns whose filled cells exactly match the solution. Lines with nothing to fill
+     * are left out, so they never pay for doing nothing.
+     */
+    private fun computeCorrectLines(): Set<String> {
+        val out = HashSet<String>()
+        for (r in 0 until puzzle.rows) {
+            if (puzzle.solution[r].none { it }) continue
+            if ((0 until puzzle.cols).all { c -> (cells[index(r, c)] == CellState.FILLED) == puzzle.solution[r][c] }) out += "r$r"
+        }
+        for (c in 0 until puzzle.cols) {
+            if ((0 until puzzle.rows).none { r -> puzzle.solution[r][c] }) continue
+            if ((0 until puzzle.rows).all { r -> (cells[index(r, c)] == CellState.FILLED) == puzzle.solution[r][c] }) out += "c$c"
+        }
+        return out
     }
 
     fun index(row: Int, col: Int) = row * puzzle.cols + col
@@ -140,6 +163,10 @@ class GameController(
     }
 
     private fun recompute() {
+        val now = computeCorrectLines()
+        val newly = now - correctLines
+        correctLines = now
+        if (newly.isNotEmpty()) onLinesCorrect(newly.sorted())
         checkSolved()
         if (solved) onSolved()
     }
@@ -228,6 +255,7 @@ class GameController(
 
     fun restart() {
         cells = List(cellCount) { CellState.EMPTY }
+        correctLines = emptySet()
         undoStack.clear()
         canUndo = false
         stroke = null

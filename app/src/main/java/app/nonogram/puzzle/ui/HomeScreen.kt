@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -48,7 +49,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.nonogram.puzzle.ads.AdManager
 import app.nonogram.puzzle.data.ProgressStore
+import app.nonogram.puzzle.data.Wallet
+import app.nonogram.puzzle.logic.Rewards
 import app.nonogram.puzzle.data.PuzzlePack
 import app.nonogram.puzzle.data.Puzzles
 import app.nonogram.puzzle.ui.theme.LocalBoardColors
@@ -70,6 +74,8 @@ fun dailyPuzzleId(epochDay: Long) = "daily-$epochDay"
 @Composable
 fun HomeScreen(
     store: ProgressStore,
+    wallet: Wallet,
+    adManager: AdManager,
     refreshKey: Int,
     onOpenPack: (PuzzlePack) -> Unit,
     onPlayDaily: (epochDay: Long) -> Unit,
@@ -79,6 +85,9 @@ fun HomeScreen(
     onShowTutorial: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showFreeCoins by remember { mutableStateOf(false) }
+    var lockedPack by remember { mutableStateOf<PuzzlePack?>(null) }
+    var unlockedKey by remember { mutableIntStateOf(0) }
     var randomSize by remember { mutableIntStateOf(10) }
     var checkMistakes by remember(refreshKey) { mutableStateOf(store.checkMistakes) }
     var haptics by remember(refreshKey) { mutableStateOf(store.hapticsEnabled) }
@@ -101,13 +110,18 @@ fun HomeScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LogoMark()
                 Spacer(Modifier.width(14.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text("Nonogram", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text("Picture logic puzzles", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                CoinBadge(wallet.coins, onClick = { showFreeCoins = true })
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(14.dp))
+            LevelBar(wallet)
+            Spacer(Modifier.height(10.dp))
+            FreeCoinsTile(onClick = { showFreeCoins = true })
+            Spacer(Modifier.height(16.dp))
 
             val collected = remember(refreshKey) { store.unmaskedCards().size }
             ChallengeTile(
@@ -126,7 +140,8 @@ fun HomeScreen(
             SectionTitle("Puzzle packs")
             for (pack in Puzzles.packs) {
                 val done = remember(refreshKey, pack.id) { store.completedCount(pack.puzzles.map { it.id }) }
-                PackCard(pack, done, onClick = { onOpenPack(pack) })
+                val locked = remember(refreshKey, unlockedKey, pack.id) { pack.price > 0 && !store.isPackUnlocked(pack.id) }
+                PackCard(pack, done, locked, onClick = { if (locked) lockedPack = pack else onOpenPack(pack) })
                 Spacer(Modifier.height(10.dp))
             }
 
@@ -217,6 +232,7 @@ fun HomeScreen(
                     HowToLine("Tap a cell to fill it. Drag to fill a whole line. Switch to Cross to mark cells you know are empty.")
                     HowToLine("Pinch with two fingers to zoom in on large boards. Double-tap to zoom back out.")
                     HowToLine("Stuck? The hint button reveals one cell you can deduce from the current board.")
+                    HowToLine("Earn coins for every correct line and every solved puzzle. Spend them on hints and new puzzle packs.")
                     androidx.compose.material3.OutlinedButton(onClick = onShowTutorial, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
@@ -237,6 +253,64 @@ fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (showFreeCoins) {
+        FreeCoinsDialog(store, wallet, adManager, context.findActivity(), onDismiss = { showFreeCoins = false })
+    }
+    lockedPack?.let { pack ->
+        UnlockPackDialog(
+            pack = pack,
+            coins = wallet.coins,
+            onUnlock = {
+                if (wallet.spend(pack.price)) {
+                    store.unlockPack(pack.id)
+                    unlockedKey++
+                    lockedPack = null
+                    onOpenPack(pack)
+                }
+            },
+            onGetCoins = { lockedPack = null; showFreeCoins = true },
+            onDismiss = { lockedPack = null },
+        )
+    }
+}
+
+@Composable
+private fun LevelBar(wallet: Wallet) {
+    val lo = Rewards.xpForLevel(wallet.level)
+    val hi = Rewards.xpForLevel(wallet.level + 1)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Level ${wallet.level}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.width(12.dp))
+        LinearProgressIndicator(
+            progress = { wallet.levelProgress },
+            modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text("${wallet.xp - lo}/${hi - lo} XP", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FreeCoinsTile(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = CoinGold.copy(alpha = 0.16f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            CoinIcon(Modifier.size(28.dp))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Free coins", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Watch short ads to earn coins", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -265,7 +339,7 @@ private fun SectionTitle(text: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PackCard(pack: PuzzlePack, done: Int, onClick: () -> Unit) {
+private fun PackCard(pack: PuzzlePack, done: Int, locked: Boolean, onClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(
@@ -282,16 +356,28 @@ private fun PackCard(pack: PuzzlePack, done: Int, onClick: () -> Unit) {
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(pack.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("${pack.size}×${pack.size} · $done of ${pack.puzzles.size} solved",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { if (pack.puzzles.isEmpty()) 0f else done.toFloat() / pack.puzzles.size },
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                )
+                if (locked) {
+                    Text("${pack.size}×${pack.size} · ${pack.puzzles.size} puzzles",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CoinIcon(Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("${pack.price} to unlock", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    Text("${pack.size}×${pack.size} · $done of ${pack.puzzles.size} solved",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { if (pack.puzzles.isEmpty()) 0f else done.toFloat() / pack.puzzles.size },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    )
+                }
             }
             Spacer(Modifier.width(8.dp))
-            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (locked) Icon(Icons.Default.Lock, "Locked", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            else Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

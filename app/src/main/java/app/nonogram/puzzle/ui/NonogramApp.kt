@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.PuzzlePack
 import app.nonogram.puzzle.data.Puzzles
+import app.nonogram.puzzle.data.Wallet
 import app.nonogram.puzzle.logic.ChallengeDifficulty
 import app.nonogram.puzzle.logic.PuzzleGenerator
 import app.nonogram.puzzle.model.Puzzle
@@ -39,7 +40,7 @@ sealed interface Screen {
     data object Collection : Screen
     data object Tutorial : Screen
     data class Pack(val pack: PuzzlePack) : Screen
-    data class Game(val puzzle: Puzzle, val title: String, val pack: PuzzlePack?) : Screen
+    data class Game(val puzzle: Puzzle, val title: String, val pack: PuzzlePack?, val isReplay: Boolean = false) : Screen
     data class Generating(val id: String, val name: String, val size: Int, val seed: Long) : Screen
     data class ChallengeGen(val seed: Long) : Screen
     data class ChallengeGame(val puzzle: Puzzle, val difficulty: ChallengeDifficulty) : Screen
@@ -47,7 +48,7 @@ sealed interface Screen {
 
 /** Tiny back-stack based navigation; there are only three screens so a nav library is not worth it. */
 @Composable
-fun NonogramApp(store: ProgressStore, adManager: AdManager) {
+fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet) {
     // First launch opens the tutorial on top of Home, so finishing it lands on the home screen.
     val stack = remember {
         mutableStateListOf<Screen>(Screen.Home).apply { if (!store.tutorialSeen) add(Screen.Tutorial) }
@@ -83,6 +84,8 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
         Screen.Tutorial -> TutorialScreen(store = store, onDone = { pop() })
         Screen.Home -> HomeScreen(
             store = store,
+            wallet = wallet,
+            adManager = adManager,
             refreshKey = refreshKey,
             onOpenPack = { push(Screen.Pack(it)) },
             onPlayDaily = { day -> push(Screen.Generating(dailyPuzzleId(day), "Daily puzzle", 10, 7_919L * day + 12_345L)) },
@@ -99,7 +102,7 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
             onBack = { pop() },
             onPlay = { puzzle ->
                 val index = screen.pack.puzzles.indexOf(puzzle) + 1
-                push(Screen.Game(puzzle, "${screen.pack.title} · $index", screen.pack))
+                push(Screen.Game(puzzle, "${screen.pack.title} · $index", screen.pack, store.isCompleted(puzzle.id)))
             },
         )
         is Screen.Game -> {
@@ -112,12 +115,14 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
                 title = screen.title,
                 store = store,
                 adManager = adManager,
+                wallet = wallet,
+                isReplay = screen.isReplay,
                 nextPuzzle = next,
                 onBack = { pop() },
                 onNext = { nextPuzzle ->
                     val pack = screen.pack!!
                     val index = pack.puzzles.indexOf(nextPuzzle) + 1
-                    replace(Screen.Game(nextPuzzle, "${pack.title} · $index", pack))
+                    replace(Screen.Game(nextPuzzle, "${pack.title} · $index", pack, store.isCompleted(nextPuzzle.id)))
                 },
             )
         }
@@ -126,7 +131,7 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
                 val puzzle = withContext(Dispatchers.Default) {
                     PuzzleGenerator.generate(screen.id, screen.name, screen.size, screen.seed)
                 }
-                replace(Screen.Game(puzzle, screen.name, null))
+                replace(Screen.Game(puzzle, screen.name, null, store.isCompleted(puzzle.id)))
             }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -157,6 +162,7 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager) {
             difficulty = screen.difficulty,
             store = store,
             adManager = adManager,
+            wallet = wallet,
             onBack = { pop() },
             onPlayAgain = { replace(Screen.ChallengeGen(System.nanoTime())) },
             onOpenCollection = { replace(Screen.Collection) },

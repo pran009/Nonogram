@@ -2,6 +2,7 @@ package app.nonogram.puzzle.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -50,12 +53,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import app.nonogram.puzzle.ads.AdManager
 import app.nonogram.puzzle.ads.BannerAd
 import app.nonogram.puzzle.data.ProgressStore
+import app.nonogram.puzzle.data.Wallet
+import app.nonogram.puzzle.logic.Rewards
 import app.nonogram.puzzle.model.CellState
 import app.nonogram.puzzle.model.Puzzle
 import app.nonogram.puzzle.ui.theme.LocalBoardColors
@@ -68,46 +70,67 @@ fun GameScreen(
     title: String,
     store: ProgressStore,
     adManager: AdManager,
+    wallet: Wallet,
+    /** True when this puzzle was already solved before: no coins, and a replay ad first. */
+    isReplay: Boolean,
     nextPuzzle: Puzzle?,
     onBack: () -> Unit,
     onNext: (Puzzle) -> Unit,
 ) {
-    val controller = remember(puzzle.id) { GameController(puzzle, store) }
+    val rewards = remember(puzzle.id) { GameRewards(puzzle, wallet, store, isReplay, persistLines = true) }
+    val controller = remember(puzzle.id) {
+        GameController(puzzle, store, onLinesCorrect = { rewards.onLinesCorrect(it) })
+    }
     val haptics = LocalHapticFeedback.current
     val boardColors = LocalBoardColors.current
     val context = LocalContext.current
+    val isDaily = puzzle.id.startsWith("daily-")
     var showRestart by remember { mutableStateOf(false) }
     var showWin by remember { mutableStateOf(false) }
-    var showHintAd by remember { mutableStateOf(false) }
     var hintCredits by remember { mutableStateOf(store.hintCredits) }
+    var hintDialog by remember { mutableStateOf(false) }
+    var hintProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var summary by remember { mutableStateOf<GameRewards.WinSummary?>(null) }
+    var doubleBusy by remember { mutableStateOf(false) }
+    var doubleMessage by remember { mutableStateOf<String?>(null) }
 
-    // Uses a hint, spending a credit. When credits run out the caller shows the rewarded-ad prompt.
-    fun spendHint() {
-        if (!adManager.adsRemoved) {
-            hintCredits -= 1
-            store.hintCredits = hintCredits
-        }
-        controller.hint()
+    // Replays start with one full-screen ad (and pay nothing).
+    LaunchedEffect(puzzle.id) {
+        if (isReplay) context.findActivity()?.let { adManager.showReplayAd(it) {} }
     }
 
     fun onHintClicked() {
         when {
-            adManager.adsRemoved || hintCredits > 0 -> spendHint()
-            else -> showHintAd = true
+            adManager.adsRemoved -> controller.hint()
+            hintCredits > 0 -> {
+                hintCredits -= 1
+                store.hintCredits = hintCredits
+                controller.hint()
+            }
+            else -> hintDialog = true
         }
     }
 
-    // Timer
-    LaunchedEffect(controller, controller.solved) {
-        while (!controller.solved) {
+    fun purchaseHint(coins: Int, ads: Int) {
+        val act = context.findActivity() ?: return
+        hintProgress = 0 to ads
+        buyHint(act, adManager, wallet, coins, ads, onProgress = { shown, total -> hintProgress = shown to total }) { ok ->
+            hintProgress = null
+            hintDialog = false
+            if (ok) controller.hint()
+        }
+    }
+
+    // Timer (paused while the hint dialog or its ads are open).
+    val clockPaused = hintDialog
+    LaunchedEffect(controller, controller.solved, clockPaused) {
+        while (!controller.solved && !clockPaused) {
             delay(1000)
             controller.tick()
         }
     }
-    // Persist when leaving
     DisposableEffect(controller) { onDispose { controller.save() } }
 
-    // Haptics on changes
     LaunchedEffect(controller.lastChangeTick) {
         if (controller.lastChangeTick == 0L) return@LaunchedEffect
         if (store.hapticsEnabled) {
@@ -120,7 +143,10 @@ fun GameScreen(
         if (controller.mistakeCell != null) { delay(700); controller.clearMistakeFlash() }
     }
     LaunchedEffect(controller.solved) {
-        if (controller.solved) { delay(350); showWin = true }
+        if (controller.solved) {
+            if (summary == null) summary = rewards.onPuzzleSolved(controller.mistakes, controller.checkMistakes, isDaily)
+            delay(350); showWin = true
+        }
     }
 
     Scaffold(
@@ -131,6 +157,8 @@ fun GameScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
+                    CoinBadge(wallet.coins)
+                    Spacer(Modifier.width(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
                         Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
@@ -153,10 +181,14 @@ fun GameScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("${puzzle.rows}×${puzzle.cols}", style = MaterialTheme.typography.labelLarge,
+                Text("${puzzle.rows}×${puzzle.cols}" + if (isReplay) " · Replay" else "", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    if (adManager.adsRemoved) "Hints: ∞" else "Hints: $hintCredits",
+                    when {
+                        adManager.adsRemoved -> "Hints: ∞"
+                        hintCredits > 0 -> "Free hints: $hintCredits"
+                        else -> ""
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -174,24 +206,24 @@ fun GameScreen(
             val rowDone = (0 until puzzle.rows).map { controller.rowDone(it) }
             val colDone = (0 until puzzle.cols).map { controller.colDone(it) }
 
-            BoardCanvas(
-                puzzle = puzzle,
-                cells = controller.cells,
-                rowDone = rowDone,
-                colDone = colDone,
-                hintCell = controller.hintCell,
-                mistakeCell = controller.mistakeCell,
-                solved = controller.solved,
-                colors = boardColors,
-                onBegin = { controller.beginStroke(it) },
-                onContinue = { i, brush, original -> controller.continueStroke(i, brush, original) },
-                onEnd = { controller.endStroke() },
-                onCancel = { controller.cancelStroke() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp)),
-            )
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                BoardCanvas(
+                    puzzle = puzzle,
+                    cells = controller.cells,
+                    rowDone = rowDone,
+                    colDone = colDone,
+                    hintCell = controller.hintCell,
+                    mistakeCell = controller.mistakeCell,
+                    solved = controller.solved,
+                    colors = boardColors,
+                    onBegin = { controller.beginStroke(it) },
+                    onContinue = { i, brush, original -> controller.continueStroke(i, brush, original) },
+                    onEnd = { controller.endStroke() },
+                    onCancel = { controller.cancelStroke() },
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                )
+                CoinToast(rewards.toast, rewards.toastTick, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
+            }
 
             Row(
                 Modifier
@@ -237,31 +269,22 @@ fun GameScreen(
         AlertDialog(
             onDismissRequest = { showRestart = false },
             title = { Text("Restart puzzle?") },
-            text = { Text("Your progress on this puzzle will be cleared.") },
+            text = { Text("Your progress on this puzzle will be cleared. Lines that already earned coins won't pay again.") },
             confirmButton = { TextButton(onClick = { controller.restart(); showRestart = false }) { Text("Restart") } },
             dismissButton = { TextButton(onClick = { showRestart = false }) { Text("Cancel") } },
         )
     }
 
-    if (showHintAd) {
-        val activity = context.findActivity()
-        AlertDialog(
-            onDismissRequest = { showHintAd = false },
-            title = { Text("Out of hints") },
-            text = { Text("Watch a short video to earn 3 hints and reveal a cell.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showHintAd = false
-                    if (activity != null) {
-                        adManager.showRewardedForHint(activity) {
-                            hintCredits += 3
-                            store.hintCredits = hintCredits
-                            spendHint()
-                        }
-                    }
-                }) { Text("Watch") }
-            },
-            dismissButton = { TextButton(onClick = { showHintAd = false }) { Text("Not now") } },
+    if (hintDialog) {
+        val price = Rewards.hintPrice(1)
+        HintDialog(
+            price = price,
+            coins = wallet.coins,
+            progress = hintProgress,
+            clockPausedNote = true,
+            onCoinsAndAds = { purchaseHint(price.coins, price.adsWithCoins) },
+            onAdsOnly = { purchaseHint(0, price.adsOnly) },
+            onDismiss = { hintDialog = false },
         )
     }
 
@@ -271,15 +294,18 @@ fun GameScreen(
             onDismissRequest = { showWin = false },
             title = { Text("Solved: ${puzzle.name}") },
             text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                ) {
                     PuzzleThumbnail(
                         puzzle, boardColors.solvedFill, boardColors.boardBackground,
                         Modifier
-                            .size(140.dp)
+                            .size(120.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(boardColors.boardBackground),
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
                     Text("Time ${formatTime(controller.seconds)}", style = MaterialTheme.typography.titleMedium)
                     if (best != null && best < controller.seconds) {
                         Text("Best ${formatTime(best)}", style = MaterialTheme.typography.bodyMedium,
@@ -293,6 +319,24 @@ fun GameScreen(
                         Text(details.joinToString(" · "), style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    WinCoinsSection(
+                        summary = summary,
+                        isReplay = isReplay,
+                        doubled = rewards.doubled,
+                        doubleBusy = doubleBusy,
+                        doubleMessage = doubleMessage,
+                        onDouble = {
+                            val act = context.findActivity()
+                            val s = summary
+                            if (act != null && s != null) {
+                                doubleBusy = true; doubleMessage = null
+                                adManager.showDoubleCoinsAd(act) { ok ->
+                                    doubleBusy = false
+                                    if (ok) rewards.applyDouble(s) else doubleMessage = "No ad available right now."
+                                }
+                            }
+                        },
+                    )
                     TextButton(onClick = {
                         shareText(
                             context,

@@ -20,8 +20,8 @@ android {
         applicationId = "app.nonogram.puzzle"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.2.0"
+        versionCode = 6
+        versionName = "1.3.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
