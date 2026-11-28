@@ -20,6 +20,10 @@ class ProgressStore(context: Context) {
         get() = prefs.getBoolean(KEY_HAPTICS, true)
         set(value) = prefs.edit().putBoolean(KEY_HAPTICS, value).apply()
 
+    var soundEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SOUND, true)
+        set(value) = prefs.edit().putBoolean(KEY_SOUND, value).apply()
+
     /** Ask "Exit Nonogram?" when pressing back on the home screen. */
     var confirmExit: Boolean
         get() = prefs.getBoolean(KEY_CONFIRM_EXIT, true)
@@ -61,6 +65,7 @@ class ProgressStore(context: Context) {
             .remove("state:$puzzleId")
             .remove("time:$puzzleId")
             .remove("lines:$puzzleId")
+            .remove("mode:$puzzleId")
             .apply()
     }
 
@@ -144,6 +149,23 @@ class ProgressStore(context: Context) {
         get() = prefs.getInt(KEY_XP, 0)
         set(value) = prefs.edit().putInt(KEY_XP, value.coerceAtLeast(0)).apply()
 
+    /** How a puzzle is being played: MODE_UNSET, MODE_NORMAL (mistakes cost coins) or MODE_SHIELD. */
+    fun puzzleMode(puzzleId: String): Int = prefs.getInt("mode:$puzzleId", MODE_UNSET)
+
+    fun setPuzzleMode(puzzleId: String, mode: Int) = prefs.edit().putInt("mode:$puzzleId", mode).apply()
+
+    /** Puzzles solved since the last "every 2 puzzles" full-screen ad. */
+    var solvedSinceAd: Int
+        get() = prefs.getInt(KEY_SOLVED_SINCE_AD, 0)
+        set(value) = prefs.edit().putInt(KEY_SOLVED_SINCE_AD, value).apply()
+
+    fun isSecretUnlocked(puzzleId: String): Boolean = puzzleId in prefs.getStringSet(KEY_SECRETS, emptySet())!!
+
+    fun unlockSecret(puzzleId: String) {
+        val set = prefs.getStringSet(KEY_SECRETS, emptySet())!!.toMutableSet().apply { add(puzzleId) }
+        prefs.edit().putStringSet(KEY_SECRETS, set).apply()
+    }
+
     fun isPackUnlocked(packId: String): Boolean = packId in prefs.getStringSet(KEY_UNLOCKED_PACKS, emptySet())!!
 
     fun unlockPack(packId: String) {
@@ -186,7 +208,7 @@ class ProgressStore(context: Context) {
         prefs.edit().putString("lines:$puzzleId", all.joinToString(",")).apply()
     }
 
-    private companion object {
+    companion object {
         const val KEY_COINS = "wallet.coins"
         const val KEY_XP = "wallet.xp"
         const val KEY_UNLOCKED_PACKS = "packs.unlocked"
@@ -197,6 +219,12 @@ class ProgressStore(context: Context) {
         const val KEY_LADDER_UNLOCK = "ladder.unlockAt"
         const val KEY_CHECK_MISTAKES = "settings.checkMistakes"
         const val KEY_HAPTICS = "settings.haptics"
+        const val KEY_SOUND = "settings.sound"
+        const val KEY_SOLVED_SINCE_AD = "ads.solvedSinceAd"
+        const val KEY_SECRETS = "facts.secrets"
+        const val MODE_UNSET = -1
+        const val MODE_NORMAL = 0
+        const val MODE_SHIELD = 1
         const val KEY_RANDOM_SOLVED = "stats.randomSolved"
         const val KEY_ADS_REMOVED = "billing.adsRemoved"
         const val KEY_HINT_CREDITS = "hints.credits"

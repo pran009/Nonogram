@@ -334,7 +334,7 @@ object Puzzles {
     )
 
     val packAnimals = PuzzlePack(
-        id = "animals", title = "Animals", size = 10, price = 300, puzzles = listOf(
+        id = "animals", title = "Animals", size = 10, price = 500, puzzles = listOf(
             p("a01", "Elephant",
                 "...#####..",
                 "..#######.",
@@ -449,7 +449,7 @@ object Puzzles {
     )
 
     val packSpace = PuzzlePack(
-        id = "space", title = "Space & Sky", size = 10, price = 400, puzzles = listOf(
+        id = "space", title = "Space & Sky", size = 10, price = 800, puzzles = listOf(
             p("s01", "Rocket",
                 "....##....",
                 "...####...",
@@ -564,7 +564,7 @@ object Puzzles {
     )
 
     val packMaster = PuzzlePack(
-        id = "master", title = "Masterworks", size = 15, price = 700, puzzles = listOf(
+        id = "master", title = "Masterworks", size = 15, price = 1000, puzzles = listOf(
             p("w01", "Lighthouse",
                 "......###......",
                 ".....#####.....",

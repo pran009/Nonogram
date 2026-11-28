@@ -19,6 +19,7 @@ object Rewards {
     }
 
     /** Extra coins for a solve with zero mistakes (only when mistake checking is on). */
+    const val MISTAKE_PENALTY = 1
     const val NO_MISTAKE_BONUS = 10
 
     /** Extra coins for solving the daily puzzle (once per day). */

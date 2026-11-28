@@ -51,6 +51,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -58,6 +61,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nonogram.puzzle.ads.AdManager
+import app.nonogram.puzzle.ads.BannerAd
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.Wallet
 import app.nonogram.puzzle.logic.ChallengeDifficulty
@@ -82,6 +86,12 @@ fun ChallengeGameScreen(
     onOpenCollection: () -> Unit,
 ) {
     val rewards = remember(puzzle.id) { GameRewards(puzzle, wallet, store, isReplay = false, persistLines = false) }
+    val flights = rememberCoinFlights()
+    var flySource by remember { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(rewards.toastTick) {
+        val from = flySource
+        if (rewards.toastTick > 0 && from != null && rewards.lastLineCoins > 0) flights.launch(from, rewards.lastLineCoins)
+    }
     val controller = remember(puzzle.id) {
         GameController(puzzle, store, persist = false, checkMistakesOverride = true,
             onLinesCorrect = { rewards.onLinesCorrect(it) })
@@ -144,93 +154,97 @@ fun ChallengeGameScreen(
         hintPromptCost = cost
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Challenge · ${difficulty.label}", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = { requestLeave() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                },
-                actions = {
-                    CoinBadge(wallet.coins)
-                    Spacer(Modifier.width(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
-                        Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(formatTime(controller.seconds), style = MaterialTheme.typography.titleMedium)
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 8.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("${puzzle.rows}×${puzzle.cols}", style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Hints: ${controller.hintsUsed}", style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    "Mistakes: ${controller.mistakes}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (controller.mistakes > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    CoinFlightHost(flights) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Challenge · ${difficulty.label}", fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = { requestLeave() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    },
+                    actions = {
+                        CoinBadge(wallet.coins, Modifier.coinFlightTarget(flights), countDelayMs = CoinFlights.ARRIVAL_MS)
+                        Spacer(Modifier.width(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
+                            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(formatTime(controller.seconds), style = MaterialTheme.typography.titleMedium)
+                        }
+                    },
                 )
-            }
-
-            val rowDone = (0 until puzzle.rows).map { controller.rowDone(it) }
-            val colDone = (0 until puzzle.cols).map { controller.colDone(it) }
-
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                BoardCanvas(
-                    puzzle = puzzle,
-                    cells = controller.cells,
-                    rowDone = rowDone,
-                    colDone = colDone,
-                    hintCell = controller.hintCell,
-                    mistakeCell = controller.mistakeCell,
-                    solved = controller.solved,
-                    colors = boardColors,
-                    onBegin = { controller.beginStroke(it) },
-                    onContinue = { i, brush, original -> controller.continueStroke(i, brush, original) },
-                    onEnd = { controller.endStroke() },
-                    onCancel = { controller.cancelStroke() },
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
-                )
-                CoinToast(rewards.toast, rewards.toastTick, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
-            }
-
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SingleChoiceSegmentedButtonRow(Modifier.height(44.dp)) {
-                    SegmentedButton(
-                        selected = controller.mode == CellState.FILLED,
-                        onClick = { controller.mode = CellState.FILLED },
-                        shape = SegmentedButtonDefaults.itemShape(0, 2),
-                        icon = { Icon(Icons.Default.Square, null, Modifier.size(16.dp)) },
-                        label = { Text("Fill") },
-                    )
-                    SegmentedButton(
-                        selected = controller.mode == CellState.CROSSED,
-                        onClick = { controller.mode = CellState.CROSSED },
-                        shape = SegmentedButtonDefaults.itemShape(1, 2),
-                        icon = { Icon(Icons.Default.Close, null, Modifier.size(16.dp)) },
-                        label = { Text("Cross") },
+            },
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 8.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("${puzzle.rows}×${puzzle.cols}", style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Hints: ${controller.hintsUsed}", style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Mistakes: ${controller.mistakes}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (controller.mistakes > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Row {
-                    FilledTonalIconButton(onClick = { controller.undo() }, enabled = controller.canUndo && !controller.solved) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+
+                val rowDone = (0 until puzzle.rows).map { controller.rowDone(it) }
+                val colDone = (0 until puzzle.cols).map { controller.colDone(it) }
+
+                Box(Modifier.fillMaxWidth().weight(1f).onGloballyPositioned { val b = it.boundsInRoot(); flySource = Offset(b.center.x, b.top + 70f) }) {
+                    BoardCanvas(
+                        puzzle = puzzle,
+                        cells = controller.cells,
+                        rowDone = rowDone,
+                        colDone = colDone,
+                        hintCell = controller.hintCell,
+                        mistakeCell = controller.mistakeCell,
+                        solved = controller.solved,
+                        colors = boardColors,
+                        onBegin = { controller.beginStroke(it) },
+                        onContinue = { i, brush, original -> controller.continueStroke(i, brush, original) },
+                        onEnd = { controller.endStroke() },
+                        onCancel = { controller.cancelStroke() },
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                    )
+                    CoinToast(rewards.toast, rewards.toastTick, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SingleChoiceSegmentedButtonRow(Modifier.height(44.dp)) {
+                        SegmentedButton(
+                            selected = controller.mode == CellState.FILLED,
+                            onClick = { controller.mode = CellState.FILLED },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2),
+                            icon = { Icon(Icons.Default.Square, null, Modifier.size(16.dp)) },
+                            label = { Text("Fill") },
+                        )
+                        SegmentedButton(
+                            selected = controller.mode == CellState.CROSSED,
+                            onClick = { controller.mode = CellState.CROSSED },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2),
+                            icon = { Icon(Icons.Default.Close, null, Modifier.size(16.dp)) },
+                            label = { Text("Cross") },
+                        )
                     }
-                    FilledTonalIconButton(onClick = { requestHint() }, enabled = !controller.solved) {
-                        Icon(Icons.Default.Lightbulb, contentDescription = "Hint")
+                    Row {
+                        FilledTonalIconButton(onClick = { controller.undo() }, enabled = controller.canUndo && !controller.solved) {
+                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                        }
+                        FilledTonalIconButton(onClick = { requestHint() }, enabled = !controller.solved) {
+                            Icon(Icons.Default.Lightbulb, contentDescription = "Hint")
+                        }
                     }
                 }
+
+                BannerAd(adManager, Modifier.padding(bottom = 4.dp))
             }
         }
     }

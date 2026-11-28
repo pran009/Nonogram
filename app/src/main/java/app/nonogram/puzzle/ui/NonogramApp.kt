@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -110,7 +111,8 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet) {
                 val i = pack.puzzles.indexOf(screen.puzzle)
                 pack.puzzles.getOrNull(i + 1)
             }
-            GameScreen(
+            // Keyed by puzzle so "Next puzzle" starts with completely fresh screen state.
+            key(screen.puzzle.id) { GameScreen(
                 puzzle = screen.puzzle,
                 title = screen.title,
                 store = store,
@@ -124,7 +126,7 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet) {
                     val index = pack.puzzles.indexOf(nextPuzzle) + 1
                     replace(Screen.Game(nextPuzzle, "${pack.title} · $index", pack, store.isCompleted(nextPuzzle.id)))
                 },
-            )
+            ) }
         }
         is Screen.Generating -> {
             LaunchedEffect(screen) {

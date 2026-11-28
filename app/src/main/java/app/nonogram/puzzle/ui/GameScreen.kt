@@ -47,6 +47,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nonogram.puzzle.ads.AdManager
 import app.nonogram.puzzle.ads.BannerAd
+import app.nonogram.puzzle.data.Facts
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.Wallet
 import app.nonogram.puzzle.logic.Rewards
@@ -77,10 +81,33 @@ fun GameScreen(
     onBack: () -> Unit,
     onNext: (Puzzle) -> Unit,
 ) {
-    val rewards = remember(puzzle.id) { GameRewards(puzzle, wallet, store, isReplay, persistLines = true) }
-    val controller = remember(puzzle.id) {
-        GameController(puzzle, store, onLinesCorrect = { rewards.onLinesCorrect(it) })
+    val rewards = remember(puzzle.id) {
+        GameRewards(puzzle, wallet, store, isReplay, persistLines = true, coinsOff = !store.checkMistakes).also {
+            it.shielded = store.puzzleMode(puzzle.id) == ProgressStore.MODE_SHIELD
+        }
     }
+    val flights = rememberCoinFlights()
+    var flySource by remember { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(rewards.toastTick) {
+        val from = flySource
+        if (rewards.toastTick > 0 && from != null && rewards.lastLineCoins > 0) flights.launch(from, rewards.lastLineCoins)
+    }
+    val controller = remember(puzzle.id) {
+        GameController(puzzle, store, onLinesCorrect = { rewards.onLinesCorrect(it) }, onMistake = { rewards.onMistake() })
+    }
+    val fact = remember(puzzle.id) { Facts.of(puzzle.id) }
+    var showFact by remember { mutableStateOf(false) }
+    var secretUnlocked by remember { mutableStateOf(store.isSecretUnlocked(puzzle.id)) }
+    var secretJustUnlocked by remember { mutableStateOf(false) }
+    var secretAdProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var secretAdMessage by remember { mutableStateOf<String?>(null) }
+    // New, coin-earning puzzles with mistake checking ask how to play first.
+    var modeDialog by remember {
+        mutableStateOf(!isReplay && controller.checkMistakes && !controller.solved &&
+            store.puzzleMode(puzzle.id) == ProgressStore.MODE_UNSET)
+    }
+    var modeBusy by remember { mutableStateOf(false) }
+    var modeMessage by remember { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
     val boardColors = LocalBoardColors.current
     val context = LocalContext.current
@@ -97,6 +124,19 @@ fun GameScreen(
     // Replays start with one full-screen ad (and pay nothing).
     LaunchedEffect(puzzle.id) {
         if (isReplay) context.findActivity()?.let { adManager.showReplayAd(it) {} }
+    }
+
+    /** Every 2nd solved puzzle, "Next puzzle" shows one full-screen ad first. */
+    fun goNext(next: Puzzle) {
+        val act = context.findActivity()
+        if (act != null && store.solvedSinceAd >= 2) {
+            adManager.showInterstitial(act) { shown ->
+                if (shown) store.solvedSinceAd = 0
+                onNext(next)
+            }
+        } else {
+            onNext(next)
+        }
     }
 
     fun onHintClicked() {
@@ -122,7 +162,7 @@ fun GameScreen(
     }
 
     // Timer (paused while the hint dialog or its ads are open).
-    val clockPaused = hintDialog
+    val clockPaused = hintDialog || modeDialog
     LaunchedEffect(controller, controller.solved, clockPaused) {
         while (!controller.solved && !clockPaused) {
             delay(1000)
@@ -144,125 +184,193 @@ fun GameScreen(
     }
     LaunchedEffect(controller.solved) {
         if (controller.solved) {
-            if (summary == null) summary = rewards.onPuzzleSolved(controller.mistakes, controller.checkMistakes, isDaily)
-            delay(350); showWin = true
+            if (summary == null) {
+                summary = rewards.onPuzzleSolved(controller.mistakes, controller.checkMistakes, isDaily)
+                store.solvedSinceAd = store.solvedSinceAd + 1
+                if (fact != null && controller.checkMistakes && controller.mistakes == 0 && !secretUnlocked) {
+                    store.unlockSecret(puzzle.id)
+                    secretUnlocked = true
+                    secretJustUnlocked = true
+                }
+            }
+            delay(350)
+            if (fact != null) showFact = true else showWin = true
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title, fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                },
-                actions = {
-                    CoinBadge(wallet.coins)
-                    Spacer(Modifier.width(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
-                        Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(formatTime(controller.seconds), style = MaterialTheme.typography.titleMedium)
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 8.dp),
-        ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("${puzzle.rows}×${puzzle.cols}" + if (isReplay) " · Replay" else "", style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    when {
-                        adManager.adsRemoved -> "Hints: ∞"
-                        hintCredits > 0 -> "Free hints: $hintCredits"
-                        else -> ""
+    CoinFlightHost(flights) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(title, fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                     },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    actions = {
+                        CoinBadge(wallet.coins, Modifier.coinFlightTarget(flights), countDelayMs = CoinFlights.ARRIVAL_MS)
+                        Spacer(Modifier.width(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
+                            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(formatTime(controller.seconds), style = MaterialTheme.typography.titleMedium)
+                        }
+                    },
                 )
-                if (controller.checkMistakes) {
-                    Text(
-                        "Mistakes: ${controller.mistakes}",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (controller.mistakes > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text("Free play", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            val rowDone = (0 until puzzle.rows).map { controller.rowDone(it) }
-            val colDone = (0 until puzzle.cols).map { controller.colDone(it) }
-
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                BoardCanvas(
-                    puzzle = puzzle,
-                    cells = controller.cells,
-                    rowDone = rowDone,
-                    colDone = colDone,
-                    hintCell = controller.hintCell,
-                    mistakeCell = controller.mistakeCell,
-                    solved = controller.solved,
-                    colors = boardColors,
-                    onBegin = { controller.beginStroke(it) },
-                    onContinue = { i, brush, original -> controller.continueStroke(i, brush, original) },
-                    onEnd = { controller.endStroke() },
-                    onCancel = { controller.cancelStroke() },
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
-                )
-                CoinToast(rewards.toast, rewards.toastTick, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
-            }
-
-            Row(
+            },
+        ) { padding ->
+            Column(
                 Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 8.dp),
             ) {
-                SingleChoiceSegmentedButtonRow(Modifier.height(44.dp)) {
-                    SegmentedButton(
-                        selected = controller.mode == CellState.FILLED,
-                        onClick = { controller.mode = CellState.FILLED },
-                        shape = SegmentedButtonDefaults.itemShape(0, 2),
-                        icon = { Icon(Icons.Default.Square, null, Modifier.size(16.dp)) },
-                        label = { Text("Fill") },
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("${puzzle.rows}×${puzzle.cols}" + if (isReplay) " · Replay" else "", style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        when {
+                            adManager.adsRemoved -> "Hints: ∞"
+                            hintCredits > 0 -> "Free hints: $hintCredits"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    SegmentedButton(
-                        selected = controller.mode == CellState.CROSSED,
-                        onClick = { controller.mode = CellState.CROSSED },
-                        shape = SegmentedButtonDefaults.itemShape(1, 2),
-                        icon = { Icon(Icons.Default.Close, null, Modifier.size(16.dp)) },
-                        label = { Text("Cross") },
-                    )
-                }
-                Row {
-                    FilledTonalIconButton(onClick = { controller.undo() }, enabled = controller.canUndo && !controller.solved) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
-                    }
-                    FilledTonalIconButton(onClick = { onHintClicked() }, enabled = !controller.solved) {
-                        Icon(Icons.Default.Lightbulb, contentDescription = "Hint")
-                    }
-                    FilledTonalIconButton(onClick = { showRestart = true }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Restart")
+                    if (controller.checkMistakes) {
+                        Text(
+                            (if (rewards.shielded) "🛡 " else "") + "Mistakes: ${controller.mistakes}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (controller.mistakes > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text("Free play · no coins", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-            }
 
-            BannerAd(adManager, Modifier.padding(bottom = 4.dp))
+                val rowDone = (0 until puzzle.rows).map { controller.rowDone(it) }
+                val colDone = (0 until puzzle.cols).map { controller.colDone(it) }
+
+                Box(Modifier.fillMaxWidth().weight(1f).onGloballyPositioned { val b = it.boundsInRoot(); flySource = Offset(b.center.x, b.top + 70f) }) {
+                    BoardCanvas(
+                        puzzle = puzzle,
+                        cells = controller.cells,
+                        rowDone = rowDone,
+                        colDone = colDone,
+                        hintCell = controller.hintCell,
+                        mistakeCell = controller.mistakeCell,
+                        solved = controller.solved,
+                        colors = boardColors,
+                        onBegin = { controller.beginStroke(it) },
+                        onContinue = { i, brush, original -> controller.continueStroke(i, brush, original) },
+                        onEnd = { controller.endStroke() },
+                        onCancel = { controller.cancelStroke() },
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                    )
+                    CoinToast(rewards.toast, rewards.toastTick, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
+                }
+
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SingleChoiceSegmentedButtonRow(Modifier.height(44.dp)) {
+                        SegmentedButton(
+                            selected = controller.mode == CellState.FILLED,
+                            onClick = { controller.mode = CellState.FILLED },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2),
+                            icon = { Icon(Icons.Default.Square, null, Modifier.size(16.dp)) },
+                            label = { Text("Fill") },
+                        )
+                        SegmentedButton(
+                            selected = controller.mode == CellState.CROSSED,
+                            onClick = { controller.mode = CellState.CROSSED },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2),
+                            icon = { Icon(Icons.Default.Close, null, Modifier.size(16.dp)) },
+                            label = { Text("Cross") },
+                        )
+                    }
+                    Row {
+                        FilledTonalIconButton(onClick = { controller.undo() }, enabled = controller.canUndo && !controller.solved) {
+                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                        }
+                        FilledTonalIconButton(onClick = { onHintClicked() }, enabled = !controller.solved) {
+                            Icon(Icons.Default.Lightbulb, contentDescription = "Hint")
+                        }
+                        FilledTonalIconButton(onClick = { showRestart = true }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Restart")
+                        }
+                    }
+                }
+
+                BannerAd(adManager, Modifier.padding(bottom = 4.dp))
+            }
         }
+    }
+
+    if (modeDialog) {
+        PlayModeDialog(
+            busy = modeBusy,
+            message = modeMessage,
+            onNormal = {
+                store.setPuzzleMode(puzzle.id, ProgressStore.MODE_NORMAL)
+                rewards.shielded = false
+                modeDialog = false
+            },
+            onShield = {
+                val act = context.findActivity()
+                if (act != null) {
+                    modeBusy = true; modeMessage = null
+                    adManager.showStrictRewardedAds(act, 1) { ok ->
+                        modeBusy = false
+                        if (ok) {
+                            store.setPuzzleMode(puzzle.id, ProgressStore.MODE_SHIELD)
+                            rewards.shielded = true
+                            modeDialog = false
+                        } else {
+                            modeMessage = "No ad available right now. Try again, or play normally."
+                        }
+                    }
+                }
+            },
+            onLeave = { modeDialog = false; onBack() },
+        )
+    }
+
+    if (showFact && fact != null) {
+        FactCardDialog(
+            puzzle = puzzle,
+            fact = fact,
+            secretUnlocked = secretUnlocked,
+            justUnlocked = secretJustUnlocked,
+            adProgress = secretAdProgress,
+            adMessage = secretAdMessage,
+            onWatchAds = {
+                val act = context.findActivity()
+                if (act != null) {
+                    secretAdProgress = 0 to 2; secretAdMessage = null
+                    adManager.showStrictRewardedAds(act, 2, onProgress = { shown, total -> secretAdProgress = shown to total }) { ok ->
+                        secretAdProgress = null
+                        if (ok) {
+                            store.unlockSecret(puzzle.id)
+                            secretJustUnlocked = true
+                            secretUnlocked = true
+                        } else {
+                            secretAdMessage = "The secret unlocks after both ads are watched to the end."
+                        }
+                    }
+                }
+            },
+            onContinue = { showFact = false; showWin = true },
+        )
     }
 
     if (showRestart) {
@@ -312,7 +420,7 @@ fun GameScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     val details = buildList {
-                        if (controller.checkMistakes) add("${controller.mistakes} mistakes")
+                        if (controller.checkMistakes) add(if (controller.mistakes == 1) "1 mistake" else "${controller.mistakes} mistakes")
                         if (controller.hintsUsed > 0) add("${controller.hintsUsed} hints")
                     }
                     if (details.isNotEmpty()) {
@@ -325,6 +433,7 @@ fun GameScreen(
                         doubled = rewards.doubled,
                         doubleBusy = doubleBusy,
                         doubleMessage = doubleMessage,
+                        coinsOff = rewards.coinsOff,
                         onDouble = {
                             val act = context.findActivity()
                             val s = summary
@@ -352,7 +461,7 @@ fun GameScreen(
             },
             confirmButton = {
                 if (nextPuzzle != null) {
-                    Button(onClick = { showWin = false; onNext(nextPuzzle) }) { Text("Next puzzle") }
+                    Button(onClick = { showWin = false; goNext(nextPuzzle) }) { Text("Next puzzle") }
                 } else {
                     Button(onClick = { showWin = false; onBack() }) { Text("Done") }
                 }

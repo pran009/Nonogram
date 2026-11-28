@@ -21,6 +21,8 @@ class GameController(
     checkMistakesOverride: Boolean? = null,
     /** Called with rows/columns ("r3", "c7") that just became correct. Used for line coins. */
     private val onLinesCorrect: (List<String>) -> Unit = {},
+    /** Called each time a wrong fill is caught (only when mistakes are checked). */
+    private val onMistake: () -> Unit = {},
 ) {
     val cellCount = puzzle.rows * puzzle.cols
 
@@ -151,6 +153,7 @@ class GameController(
         if (mistake) {
             mistakes++
             mistakeCell = i
+            onMistake()
         }
         hintCell = null
         lastChangeWasMistake = mistake

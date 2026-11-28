@@ -52,6 +52,13 @@ class Wallet(private val store: ProgressStore) {
         store.coins = coins
     }
 
+    /** Takes up to [amount] coins as a penalty, never going below 0. Returns how many were taken. */
+    fun lose(amount: Int): Int {
+        val taken = amount.coerceIn(0, coins)
+        if (taken > 0) { coins -= taken; store.coins = coins }
+        return taken
+    }
+
     /** Spends coins if the balance allows. Returns false (and changes nothing) otherwise. */
     fun spend(amount: Int): Boolean {
         if (amount < 0 || coins < amount) return false

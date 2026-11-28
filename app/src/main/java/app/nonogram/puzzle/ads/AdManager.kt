@@ -2,6 +2,8 @@ package app.nonogram.puzzle.ads
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,42 +87,98 @@ class AdManager(context: Context, private val store: ProgressStore) {
     fun showDoubleCoinsAd(activity: Activity, onResult: (Boolean) -> Unit) =
         doubleCoinsSlot.show(activity, strict = true, onResult)
 
-    // ---- Replay interstitial ----------------------------------------------------------------
-
-    /** Shows the replay ad if one is ready, then calls [onDone]. Never blocks starting the replay. */
-    fun showReplayAd(activity: Activity, onDone: () -> Unit) {
-        if (adsRemoved) { onDone(); return }
-        replaySlot.show(activity, onDone)
+    /**
+     * Strict ads for things that protect or unlock (mistake shield, secrets): [onComplete] is
+     * true only if all [count] ads were really watched.
+     */
+    fun showStrictRewardedAds(
+        activity: Activity,
+        count: Int,
+        onProgress: (Int, Int) -> Unit = { _, _ -> },
+        onComplete: (Boolean) -> Unit,
+    ) {
+        if (adsRemoved) { onComplete(true); return }
+        fun step(done: Int) {
+            if (done >= count) { onComplete(true); return }
+            hintSlot.show(activity, strict = true) { earned ->
+                if (earned) { onProgress(done + 1, count); step(done + 1) } else onComplete(false)
+            }
+        }
+        step(0)
     }
+
+    // ---- Interstitials (replays, every 2nd "Next puzzle") ----------------------------------
+
+    private var lastInterstitialAt = 0L
+
+    /**
+     * Shows a full-screen ad if one is ready and none was shown in the last minute, then calls
+     * [onDone] with whether it was shown. Never blocks the player.
+     */
+    fun showInterstitial(activity: Activity, onDone: (shown: Boolean) -> Unit) {
+        val now = System.currentTimeMillis()
+        if (adsRemoved || now - lastInterstitialAt < MIN_INTERSTITIAL_GAP_MS) { onDone(false); return }
+        replaySlot.show(activity) { shown ->
+            if (shown) lastInterstitialAt = System.currentTimeMillis()
+            onDone(shown)
+        }
+    }
+
+    /** Replays start with one full-screen ad. */
+    fun showReplayAd(activity: Activity, onDone: () -> Unit) = showInterstitial(activity) { onDone() }
 
     // ---- Slots ------------------------------------------------------------------------------
 
     private inner class RewardedSlot(private val unitId: String) {
         private var ad: RewardedAd? = null
         private var loading = false
+        /** Runs once when the load in progress finishes (loaded or failed). */
+        private var onLoadFinished: (() -> Unit)? = null
         val ready: Boolean get() = ad != null
 
         fun load() {
             if (adsRemoved || loading || ad != null) return
             loading = true
             RewardedAd.load(appContext, unitId, AdRequest.Builder().build(), object : RewardedAdLoadCallback() {
-                override fun onAdLoaded(loaded: RewardedAd) { ad = loaded; loading = false }
+                override fun onAdLoaded(loaded: RewardedAd) {
+                    ad = loaded; loading = false
+                    onLoadFinished?.let { onLoadFinished = null; it() }
+                }
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     Log.w(TAG, "Rewarded $unitId failed to load: ${error.message}")
                     ad = null; loading = false
+                    onLoadFinished?.let { onLoadFinished = null; it() }
                 }
             })
         }
 
         /**
-         * Shows the ad; [onResult] gets true if the reward was earned.
+         * Shows the ad; [onResult] gets true if the reward was earned. If no ad is loaded yet
+         * (for example the 2nd of 2 ads in a row), waits up to [LOAD_WAIT_MS] for one.
          * strict = false: a missing or failed ad counts as earned (hints must never block play).
          * strict = true:  a missing or failed ad counts as not earned (coins need a real ad).
          */
         fun show(activity: Activity, strict: Boolean, onResult: (Boolean) -> Unit) {
             if (adsRemoved) { onResult(!strict); return }
-            val current = ad
-            if (current == null) { load(); onResult(!strict); return }
+            if (ad != null) { showNow(activity, strict, onResult); return }
+            var finished = false
+            val handler = Handler(Looper.getMainLooper())
+            val timeout = Runnable {
+                if (!finished) { finished = true; onLoadFinished = null; onResult(!strict) }
+            }
+            onLoadFinished = {
+                if (!finished) {
+                    finished = true
+                    handler.removeCallbacks(timeout)
+                    if (ad != null) showNow(activity, strict, onResult) else onResult(!strict)
+                }
+            }
+            handler.postDelayed(timeout, LOAD_WAIT_MS)
+            load()
+        }
+
+        private fun showNow(activity: Activity, strict: Boolean, onResult: (Boolean) -> Unit) {
+            val current = ad ?: run { onResult(!strict); return }
             var earned = false
             current.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
@@ -150,12 +208,12 @@ class AdManager(context: Context, private val store: ProgressStore) {
             })
         }
 
-        fun show(activity: Activity, onDone: () -> Unit) {
+        fun show(activity: Activity, onDone: (shown: Boolean) -> Unit) {
             val current = ad
-            if (current == null) { load(); onDone(); return }
+            if (current == null) { load(); onDone(false); return }
             current.fullScreenContentCallback = object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent() { ad = null; load(); onDone() }
-                override fun onAdFailedToShowFullScreenContent(error: AdError) { ad = null; load(); onDone() }
+                override fun onAdDismissedFullScreenContent() { ad = null; load(); onDone(true) }
+                override fun onAdFailedToShowFullScreenContent(error: AdError) { ad = null; load(); onDone(false) }
             }
             current.show(activity)
         }
@@ -163,5 +221,8 @@ class AdManager(context: Context, private val store: ProgressStore) {
 
     private companion object {
         const val TAG = "AdManager"
+        const val MIN_INTERSTITIAL_GAP_MS = 60_000L
+        /** How long a rewarded ad request waits for an ad that is still loading. */
+        const val LOAD_WAIT_MS = 8_000L
     }
 }

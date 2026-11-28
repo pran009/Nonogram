@@ -2,6 +2,8 @@ package app.nonogram.puzzle.ui
 
 import android.app.Activity
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,11 +63,27 @@ fun CoinIcon(modifier: Modifier = Modifier) {
     Icon(Icons.Default.MonetizationOn, contentDescription = null, tint = CoinGold, modifier = modifier)
 }
 
-/** Pill showing the coin balance. */
+/**
+ * Pill showing the coin balance. Gains count up and make the pill bounce; [countDelayMs] lets
+ * the count wait until flying coins have landed.
+ */
 @Composable
-fun CoinBadge(coins: Int, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+fun CoinBadge(coins: Int, modifier: Modifier = Modifier, countDelayMs: Int = 0, onClick: (() -> Unit)? = null) {
+    var target by remember { mutableIntStateOf(coins) }
+    val bounce = remember { Animatable(1f) }
+    LaunchedEffect(coins) {
+        val gained = coins > target
+        if (gained && countDelayMs > 0) delay(countDelayMs.toLong())
+        target = coins
+        if (gained) {
+            bounce.animateTo(1.25f, tween(110))
+            bounce.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = 500f))
+        }
+    }
+    val shown by animateIntAsState(target, tween(550), label = "coins")
     Row(
         modifier
+            .graphicsLayer { scaleX = bounce.value; scaleY = bounce.value }
             .clip(RoundedCornerShape(50))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
@@ -73,7 +92,7 @@ fun CoinBadge(coins: Int, modifier: Modifier = Modifier, onClick: (() -> Unit)? 
     ) {
         CoinIcon(Modifier.size(20.dp))
         Spacer(Modifier.width(6.dp))
-        Text("%,d".format(coins), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text("%,d".format(shown), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -179,14 +198,51 @@ fun WinCoinsSection(
     doubleBusy: Boolean,
     doubleMessage: String?,
     onDouble: () -> Unit,
+    coinsOff: Boolean = false,
 ) {
+    if (isReplay || summary == null) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            HorizontalDivider(Modifier.padding(vertical = 10.dp))
+            Text(
+                if (isReplay) "Replay: no coins for solving a puzzle again."
+                else if (coinsOff) "\"Check mistakes\" was off, so this puzzle earned no coins. Turn it on in Settings to earn coins."
+                else "No coins this time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+    // Celebrate once per win (and once more when doubled), even if the dialog is reopened.
+    var burst by remember { mutableIntStateOf(0) }
+    var counted by remember { mutableStateOf(summary.celebrated) }
+    LaunchedEffect(summary) {
+        if (!summary.celebrated) {
+            summary.celebrated = true
+            CoinSounds.shower()
+            burst++
+            delay(150)
+        }
+        counted = true
+    }
+    LaunchedEffect(doubled) {
+        if (doubled && !summary.doubleCelebrated) {
+            summary.doubleCelebrated = true
+            CoinSounds.shower()
+            burst++
+        }
+    }
+    val earned = summary.total + if (doubled) summary.doubleable else 0
+    val totalShown by animateIntAsState(if (counted) earned else 0, tween(900), label = "total")
+    Box(Modifier.fillMaxWidth()) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         HorizontalDivider(Modifier.padding(vertical = 10.dp))
-        if (isReplay || summary == null) {
-            Text("Replay: no coins for solving a puzzle again.", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            return@Column
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CoinIcon(Modifier.size(30.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("+$totalShown", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = CoinGold)
         }
+        Spacer(Modifier.height(6.dp))
         for ((label, amount) in summary.items) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -214,6 +270,8 @@ fun WinCoinsSection(
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+    CoinBurst(burst, Modifier.matchParentSize())
+    }
 }
 
 /** The free-coins ad ladder: 10, 20, 25, 30, 40 coins; two ladders a day, one hour apart. */
@@ -229,6 +287,7 @@ fun FreeCoinsDialog(
     var ladder by remember { mutableStateOf(store.ladder) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var burst by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
     val today = todayEpochDay()
     val status = FreeCoinLadder.status(ladder, today, now)
@@ -238,6 +297,7 @@ fun FreeCoinsDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("Free coins") },
         text = {
+            Box(Modifier.fillMaxWidth()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text("Each ad pays more than the last.", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
@@ -269,6 +329,8 @@ fun FreeCoinsDialog(
                 )
                 message?.let { Spacer(Modifier.height(6.dp)); Text(it, fontWeight = FontWeight.SemiBold) }
             }
+            CoinBurst(burst, Modifier.matchParentSize())
+            }
         },
         confirmButton = {
             if (status is LadderStatus.Available) {
@@ -283,6 +345,8 @@ fun FreeCoinsDialog(
                                 store.ladder = result.second
                                 ladder = result.second
                                 message = "+${result.first} coins!"
+                                CoinSounds.shower()
+                                burst++
                             }
                         } else {
                             message = "No ad available right now. Please try again later."

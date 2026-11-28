@@ -74,7 +74,7 @@ class RewardsTest {
 
     @Test fun lockedPacksHaveTenPuzzlesAndPrices() {
         val paid = Puzzles.packs.filter { it.price > 0 }
-        assertEquals(listOf(300, 400, 700), paid.map { it.price })
+        assertEquals(listOf(500, 800, 1000), paid.map { it.price })
         paid.forEach { assertEquals(10, it.puzzles.size) }
         assertEquals("animals", Puzzles.packOf("a03")?.id)
     }

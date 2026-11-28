@@ -91,6 +91,7 @@ fun HomeScreen(
     var randomSize by remember { mutableIntStateOf(10) }
     var checkMistakes by remember(refreshKey) { mutableStateOf(store.checkMistakes) }
     var haptics by remember(refreshKey) { mutableStateOf(store.hapticsEnabled) }
+    var sound by remember(refreshKey) { mutableStateOf(store.soundEnabled) }
     var confirmExit by remember(refreshKey) { mutableStateOf(store.confirmExit) }
     val epochDay = remember(refreshKey) { todayEpochDay() }
     val dailyDone = remember(refreshKey) { store.isCompleted(dailyPuzzleId(epochDay)) }
@@ -193,8 +194,10 @@ fun HomeScreen(
                         for (s in listOf(5, 10, 15)) {
                             FilterChip(selected = randomSize == s, onClick = { randomSize = s }, label = { Text("${s}×$s") })
                         }
-                        Spacer(Modifier.weight(1f))
-                        Button(onClick = { onPlayRandom(randomSize, System.nanoTime()) }) { Text("Play") }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { onPlayRandom(randomSize, System.nanoTime()) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Play ${randomSize}×$randomSize", maxLines = 1)
                     }
                 }
             }
@@ -208,6 +211,12 @@ fun HomeScreen(
                         subtitle = "Wrong fills are marked immediately and counted",
                         checked = checkMistakes,
                         onChange = { checkMistakes = it; store.checkMistakes = it },
+                    )
+                    SettingRow(
+                        title = "Sound effects",
+                        subtitle = "Coin sounds when you earn coins",
+                        checked = sound,
+                        onChange = { sound = it; store.soundEnabled = it; CoinSounds.enabled = it },
                     )
                     SettingRow(
                         title = "Vibration",
@@ -265,6 +274,7 @@ fun HomeScreen(
             coins = wallet.coins,
             onUnlock = {
                 if (wallet.spend(pack.price)) {
+                    CoinSounds.shower()
                     store.unlockPack(pack.id)
                     unlockedKey++
                     lockedPack = null

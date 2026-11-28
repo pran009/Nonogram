@@ -2,6 +2,10 @@ package app.nonogram.puzzle.ads
 
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -19,9 +23,14 @@ fun BannerAd(adManager: AdManager, modifier: Modifier = Modifier) {
     if (adManager.adsRemoved) return
     val configuration = LocalConfiguration.current
     val widthDp = configuration.screenWidthDp
+    val context = LocalContext.current
+    // Reserve the banner's exact height up front so the board never jumps when the ad loads.
+    val heightDp = remember(widthDp) {
+        AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, widthDp).height
+    }
 
     AndroidView(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().height(heightDp.dp),
         factory = { ctx ->
             FrameLayout(ctx).apply {
                 val adView = AdView(ctx).apply {

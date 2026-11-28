@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import app.nonogram.puzzle.ads.AdManager
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.Wallet
+import app.nonogram.puzzle.ui.CoinSounds
 import app.nonogram.puzzle.ui.NonogramApp
 import app.nonogram.puzzle.ui.theme.NonogramTheme
 
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
         adManager = AdManager(this, store)
         adManager.initialize()
         val wallet = Wallet(store)
+        CoinSounds.init(this, store.soundEnabled)
 
         setContent {
             NonogramTheme {
