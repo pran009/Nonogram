@@ -39,7 +39,14 @@ class AdManager(context: Context, private val store: ProgressStore) {
     private val doubleCoinsSlot = RewardedSlot(AdIds.doubleCoins)
     private val replaySlot = InterstitialSlot(AdIds.replay)
 
+    /** True once the Mobile Ads SDK has been started (only after consent allows ad requests). */
+    var ready by mutableStateOf(false)
+        private set
+
+    /** Starts the SDK and preloads ads. Safe to call more than once; only the first call counts. */
     fun initialize() {
+        if (ready) return
+        ready = true
         MobileAds.initialize(appContext) {}
         if (!adsRemoved) {
             hintSlot.load(); freeCoinsSlot.load(); doubleCoinsSlot.load(); replaySlot.load()
@@ -137,7 +144,7 @@ class AdManager(context: Context, private val store: ProgressStore) {
         val ready: Boolean get() = ad != null
 
         fun load() {
-            if (adsRemoved || loading || ad != null) return
+            if (adsRemoved || !ready || loading || ad != null) return
             loading = true
             RewardedAd.load(appContext, unitId, AdRequest.Builder().build(), object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(loaded: RewardedAd) {
@@ -161,6 +168,7 @@ class AdManager(context: Context, private val store: ProgressStore) {
         fun show(activity: Activity, strict: Boolean, onResult: (Boolean) -> Unit) {
             if (adsRemoved) { onResult(!strict); return }
             if (ad != null) { showNow(activity, strict, onResult); return }
+            if (!ready) { onResult(!strict); return }
             var finished = false
             val handler = Handler(Looper.getMainLooper())
             val timeout = Runnable {
@@ -197,7 +205,7 @@ class AdManager(context: Context, private val store: ProgressStore) {
         private var loading = false
 
         fun load() {
-            if (adsRemoved || loading || ad != null) return
+            if (adsRemoved || !ready || loading || ad != null) return
             loading = true
             InterstitialAd.load(appContext, unitId, AdRequest.Builder().build(), object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(loaded: InterstitialAd) { ad = loaded; loading = false }

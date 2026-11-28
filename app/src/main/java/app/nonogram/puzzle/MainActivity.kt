@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import app.nonogram.puzzle.ads.AdManager
+import app.nonogram.puzzle.ads.ConsentManager
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.Wallet
 import app.nonogram.puzzle.ui.CoinSounds
@@ -25,14 +26,18 @@ class MainActivity : ComponentActivity() {
 
         val store = ProgressStore(this)
         adManager = AdManager(this, store)
-        adManager.initialize()
+        val consent = ConsentManager(this)
+        // Ask for ad consent where the law requires it, and only then start ads. A returning
+        // player who already answered can start ads right away while the status refreshes.
+        consent.gather(this) { if (consent.canRequestAds) adManager.initialize() }
+        if (consent.canRequestAds) adManager.initialize()
         val wallet = Wallet(store)
         CoinSounds.init(this, store.soundEnabled)
 
         setContent {
             NonogramTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    NonogramApp(store = store, adManager = adManager, wallet = wallet)
+                    NonogramApp(store = store, adManager = adManager, wallet = wallet, consent = consent)
                 }
             }
         }

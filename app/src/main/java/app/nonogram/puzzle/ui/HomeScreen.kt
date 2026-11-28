@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -50,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nonogram.puzzle.ads.AdManager
+import app.nonogram.puzzle.ads.ConsentManager
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.Wallet
 import app.nonogram.puzzle.logic.Rewards
@@ -76,6 +78,7 @@ fun HomeScreen(
     store: ProgressStore,
     wallet: Wallet,
     adManager: AdManager,
+    consent: ConsentManager,
     refreshKey: Int,
     onOpenPack: (PuzzlePack) -> Unit,
     onPlayDaily: (epochDay: Long) -> Unit,
@@ -254,6 +257,11 @@ fun HomeScreen(
             SectionTitle("Help & feedback")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    if (consent.privacyOptionsRequired) {
+                        LinkRow(Icons.Default.PrivacyTip, "Privacy settings", "Change your ad consent choices") {
+                            context.findActivity()?.let { consent.showPrivacyOptions(it) }
+                        }
+                    }
                     LinkRow(Icons.Default.Email, "Send feedback", "Report a problem or suggest a feature") { sendFeedback(context) }
                     LinkRow(Icons.Default.Star, "Rate Nonogram", "Enjoying it? A rating helps a lot") { openStorePage(context) }
                     LinkRow(Icons.Default.Share, "Share with friends", "Invite someone to play") {

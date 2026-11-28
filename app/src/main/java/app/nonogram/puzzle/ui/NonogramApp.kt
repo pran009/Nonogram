@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.nonogram.puzzle.ads.AdManager
+import app.nonogram.puzzle.ads.ConsentManager
 import androidx.compose.ui.unit.dp
 import app.nonogram.puzzle.data.ProgressStore
 import app.nonogram.puzzle.data.PuzzlePack
@@ -51,7 +52,7 @@ sealed interface Screen {
 
 /** Tiny back-stack based navigation; there are only three screens so a nav library is not worth it. */
 @Composable
-fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet) {
+fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet, consent: ConsentManager) {
     // First launch opens the tutorial on top of Home, so finishing it lands on the home screen.
     val stack = remember {
         mutableStateListOf<Screen>(Screen.Home).apply { if (!store.tutorialSeen) add(Screen.Tutorial) }
@@ -89,6 +90,7 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet) {
             store = store,
             wallet = wallet,
             adManager = adManager,
+            consent = consent,
             refreshKey = refreshKey,
             onOpenPack = { push(Screen.Pack(it)) },
             onPlayDaily = { day -> push(Screen.Generating(dailyPuzzleId(day), "Daily puzzle", 10, 7_919L * day + 12_345L)) },
