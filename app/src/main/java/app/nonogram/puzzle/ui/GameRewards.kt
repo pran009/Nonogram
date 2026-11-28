@@ -26,8 +26,8 @@ class GameRewards(
     /** Playing with "Check mistakes" off earns no coins at all. */
     val coinsOff: Boolean = false,
 ) {
-    /** Mistake shield (watched an ad): mistakes don't cost coins. */
-    var shielded = false
+    /** Mistake shield (watched an ad): mistakes don't cost coins. Observable so the UI updates. */
+    var shielded by mutableStateOf(false)
     private val paid: MutableSet<String> =
         if (persistLines) store.paidLines(puzzle.id).toMutableSet() else mutableSetOf()
 

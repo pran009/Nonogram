@@ -1,6 +1,13 @@
 package app.nonogram.puzzle.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -93,71 +100,89 @@ fun FactCardDialog(
                 },
         ) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (fact.image != 0) {
-                    Image(
-                        painterResource(fact.image),
-                        contentDescription = puzzle.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().height(210.dp),
-                    )
-                } else {
-                    val colors = LocalBoardColors.current
-                    Box(Modifier.fillMaxWidth().height(170.dp).background(colors.boardBackground), contentAlignment = Alignment.Center) {
-                        PuzzleThumbnail(puzzle, colors.solvedFill, colors.boardBackground, Modifier.size(130.dp))
-                    }
-                }
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (fact.credit.isNotEmpty()) {
-                        Text("Photo: ${fact.credit}", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Column {
-                        Text("You discovered", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text(puzzle.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    }
-                    Text(fact.about, style = MaterialTheme.typography.bodyMedium)
+                FactContent(puzzle, fact, secretUnlocked, justUnlocked, adProgress, adMessage, onWatchAds, secretGlow.value)
+                Button(
+                    onClick = onContinue, enabled = adProgress == null,
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
+                ) { Text("Continue") }
+            }
+        }
+    }
+}
 
-                    FactSection("💡  Fun fact", MaterialTheme.colorScheme.secondaryContainer) {
-                        Text(fact.funFact, style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    }
+/** Photo, About, Fun fact and Secret. Shared by the post-solve dialog and the solved-puzzle page. */
+@Composable
+fun FactContent(
+    puzzle: Puzzle,
+    fact: Fact,
+    secretUnlocked: Boolean,
+    justUnlocked: Boolean,
+    adProgress: Pair<Int, Int>?,
+    adMessage: String?,
+    onWatchAds: () -> Unit,
+    secretAlpha: Float = 1f,
+) {
+    Column {
+        if (fact.image != 0) {
+            Image(
+                painterResource(fact.image),
+                contentDescription = puzzle.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(210.dp),
+            )
+        } else {
+            val colors = LocalBoardColors.current
+            Box(Modifier.fillMaxWidth().height(170.dp).background(colors.boardBackground), contentAlignment = Alignment.Center) {
+                PuzzleThumbnail(puzzle, colors.solvedFill, colors.boardBackground, Modifier.size(130.dp))
+            }
+        }
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (fact.credit.isNotEmpty()) {
+                Text("Photo: ${fact.credit}", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column {
+                Text("You discovered", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text(puzzle.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+            Text(fact.about, style = MaterialTheme.typography.bodyMedium)
 
-                    FactSection(if (secretUnlocked) "✨  Secret" else "🔒  Secret", CoinGold.copy(alpha = 0.18f)) {
-                        if (secretUnlocked) {
-                            Column(Modifier.graphicsLayer { alpha = secretGlow.value }) {
-                                if (justUnlocked) {
-                                    Text("Unlocked!", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = CoinGold)
-                                    Spacer(Modifier.height(4.dp))
-                                }
-                                Text(fact.secret, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Solve this puzzle with no mistakes to reveal the secret.",
-                                        style = MaterialTheme.typography.bodyMedium)
-                                }
-                                FilledTonalButton(onClick = onWatchAds, enabled = adProgress == null, modifier = Modifier.fillMaxWidth()) {
-                                    Icon(Icons.Default.PlayCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(if (adProgress != null) "Playing ad ${adProgress.first + 1} of ${adProgress.second}…" else "Watch 2 ads to unlock")
-                                }
-                                Text("Or come back later and solve it again with no mistakes.",
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                adMessage?.let {
-                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                }
-                            }
+            FactSection("💡  Fun fact", MaterialTheme.colorScheme.secondaryContainer) {
+                Text(fact.funFact, style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+
+            FactSection(if (secretUnlocked) "✨  Secret" else "🔒  Secret", CoinGold.copy(alpha = 0.18f)) {
+                if (secretUnlocked) {
+                    Column(Modifier.graphicsLayer { alpha = secretAlpha }) {
+                        if (justUnlocked) {
+                            Text("Unlocked!", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = CoinGold)
+                            Spacer(Modifier.height(4.dp))
                         }
+                        Text(fact.secret, style = MaterialTheme.typography.bodyMedium)
                     }
-
-                    Button(onClick = onContinue, enabled = adProgress == null, modifier = Modifier.fillMaxWidth()) {
-                        Text("Continue")
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Solve this puzzle with no mistakes to reveal the secret.",
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
+                        FilledTonalButton(onClick = onWatchAds, enabled = adProgress == null, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.PlayCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (adProgress != null) "Playing ad ${adProgress.first + 1} of ${adProgress.second}…" else "Watch 2 ads to unlock")
+                        }
+                        Text("Or come back later and solve it again with no mistakes.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        adMessage?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
+
         }
     }
 }
@@ -178,35 +203,57 @@ private fun FactSection(title: String, background: androidx.compose.ui.graphics.
 }
 
 /**
- * Asked before a new puzzle when mistakes are checked: play normally (each mistake costs a
- * coin) or watch an ad to play without losing coins.
+ * Optional mistake shield, shown on the board. Tapping it plays an ad; after that, mistakes in
+ * this puzzle stop costing coins. It pulses gently until the player makes their first move.
  */
 @Composable
-fun PlayModeDialog(busy: Boolean, message: String?, onNormal: () -> Unit, onShield: () -> Unit, onLeave: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = { if (!busy) onLeave() },
-        title = { Text("How do you want to play?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Mistakes are checked in this puzzle.", style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = onNormal, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Play normally", fontWeight = FontWeight.SemiBold)
-                        Text("Each mistake costs 1 coin", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                OutlinedButton(onClick = onShield, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (busy) "Loading ad…" else "Watch an ad", fontWeight = FontWeight.SemiBold)
-                        Text("Play without losing coins", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+fun ShieldBar(
+    active: Boolean,
+    busy: Boolean,
+    highlight: Boolean,
+    message: String?,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        if (active) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Spacer(Modifier.width(6.dp))
+                Text("Shield on: mistakes cost no coins", style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onLeave, enabled = !busy) { Text("Back") } },
-    )
+        } else {
+            val pulse = rememberInfiniteTransition(label = "shield")
+            val glow by pulse.animateFloat(
+                initialValue = 0.35f, targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "glow",
+            )
+            OutlinedButton(
+                onClick = onTap,
+                enabled = !busy,
+                border = BorderStroke(if (highlight) 2.dp else 1.dp,
+                    CoinGold.copy(alpha = if (highlight) glow else 0.6f)),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                modifier = Modifier.height(36.dp),
+            ) {
+                Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(16.dp), tint = CoinGold)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (busy) "Loading ad…" else "Tap to play without losing coins (ad)",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+        message?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+    }
 }

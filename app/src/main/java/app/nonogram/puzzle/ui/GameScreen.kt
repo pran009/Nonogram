@@ -101,13 +101,10 @@ fun GameScreen(
     var secretJustUnlocked by remember { mutableStateOf(false) }
     var secretAdProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var secretAdMessage by remember { mutableStateOf<String?>(null) }
-    // New, coin-earning puzzles with mistake checking ask how to play first.
-    var modeDialog by remember {
-        mutableStateOf(!isReplay && controller.checkMistakes && !controller.solved &&
-            store.puzzleMode(puzzle.id) == ProgressStore.MODE_UNSET)
-    }
-    var modeBusy by remember { mutableStateOf(false) }
-    var modeMessage by remember { mutableStateOf<String?>(null) }
+    // Mistake shield: an optional button on the board (watch an ad, mistakes stop costing coins).
+    val shieldOffered = !isReplay && !rewards.coinsOff && controller.checkMistakes
+    var shieldBusy by remember { mutableStateOf(false) }
+    var shieldMessage by remember { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
     val boardColors = LocalBoardColors.current
     val context = LocalContext.current
@@ -162,7 +159,7 @@ fun GameScreen(
     }
 
     // Timer (paused while the hint dialog or its ads are open).
-    val clockPaused = hintDialog || modeDialog
+    val clockPaused = hintDialog || shieldBusy
     LaunchedEffect(controller, controller.solved, clockPaused) {
         while (!controller.solved && !clockPaused) {
             delay(1000)
@@ -253,6 +250,31 @@ fun GameScreen(
                     }
                 }
 
+                if (shieldOffered && !controller.solved) {
+                    ShieldBar(
+                        active = rewards.shielded,
+                        busy = shieldBusy,
+                        highlight = !controller.canUndo && controller.mistakes == 0,
+                        message = shieldMessage,
+                        onTap = {
+                            val act = context.findActivity()
+                            if (act != null) {
+                                shieldBusy = true; shieldMessage = null
+                                adManager.showStrictRewardedAds(act, 1) { ok ->
+                                    shieldBusy = false
+                                    if (ok) {
+                                        store.setPuzzleMode(puzzle.id, ProgressStore.MODE_SHIELD)
+                                        rewards.shielded = true
+                                    } else {
+                                        shieldMessage = "No ad right now. Try again in a moment."
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+
                 val rowDone = (0 until puzzle.rows).map { controller.rowDone(it) }
                 val colDone = (0 until puzzle.cols).map { controller.colDone(it) }
 
@@ -314,35 +336,6 @@ fun GameScreen(
                 BannerAd(adManager, Modifier.padding(bottom = 4.dp))
             }
         }
-    }
-
-    if (modeDialog) {
-        PlayModeDialog(
-            busy = modeBusy,
-            message = modeMessage,
-            onNormal = {
-                store.setPuzzleMode(puzzle.id, ProgressStore.MODE_NORMAL)
-                rewards.shielded = false
-                modeDialog = false
-            },
-            onShield = {
-                val act = context.findActivity()
-                if (act != null) {
-                    modeBusy = true; modeMessage = null
-                    adManager.showStrictRewardedAds(act, 1) { ok ->
-                        modeBusy = false
-                        if (ok) {
-                            store.setPuzzleMode(puzzle.id, ProgressStore.MODE_SHIELD)
-                            rewards.shielded = true
-                            modeDialog = false
-                        } else {
-                            modeMessage = "No ad available right now. Try again, or play normally."
-                        }
-                    }
-                }
-            },
-            onLeave = { modeDialog = false; onBack() },
-        )
     }
 
     if (showFact && fact != null) {

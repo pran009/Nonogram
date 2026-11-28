@@ -42,6 +42,8 @@ sealed interface Screen {
     data object Tutorial : Screen
     data class Pack(val pack: PuzzlePack) : Screen
     data class Game(val puzzle: Puzzle, val title: String, val pack: PuzzlePack?, val isReplay: Boolean = false) : Screen
+    /** A solved pack puzzle: picture, fact card and a Replay button. */
+    data class Solved(val puzzle: Puzzle, val title: String, val pack: PuzzlePack) : Screen
     data class Generating(val id: String, val name: String, val size: Int, val seed: Long) : Screen
     data class ChallengeGen(val seed: Long) : Screen
     data class ChallengeGame(val puzzle: Puzzle, val difficulty: ChallengeDifficulty) : Screen
@@ -103,7 +105,8 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet) {
             onBack = { pop() },
             onPlay = { puzzle ->
                 val index = screen.pack.puzzles.indexOf(puzzle) + 1
-                push(Screen.Game(puzzle, "${screen.pack.title} · $index", screen.pack, store.isCompleted(puzzle.id)))
+                val title = "${screen.pack.title} · $index"
+                push(if (store.isCompleted(puzzle.id)) Screen.Solved(puzzle, title, screen.pack) else Screen.Game(puzzle, title, screen.pack))
             },
         )
         is Screen.Game -> {
@@ -124,10 +127,19 @@ fun NonogramApp(store: ProgressStore, adManager: AdManager, wallet: Wallet) {
                 onNext = { nextPuzzle ->
                     val pack = screen.pack!!
                     val index = pack.puzzles.indexOf(nextPuzzle) + 1
-                    replace(Screen.Game(nextPuzzle, "${pack.title} · $index", pack, store.isCompleted(nextPuzzle.id)))
+                    val title = "${pack.title} · $index"
+                    replace(if (store.isCompleted(nextPuzzle.id)) Screen.Solved(nextPuzzle, title, pack) else Screen.Game(nextPuzzle, title, pack))
                 },
             ) }
         }
+        is Screen.Solved -> SolvedPuzzleScreen(
+            puzzle = screen.puzzle,
+            title = screen.title,
+            store = store,
+            adManager = adManager,
+            onBack = { pop() },
+            onReplay = { replace(Screen.Game(screen.puzzle, screen.title, screen.pack, isReplay = true)) },
+        )
         is Screen.Generating -> {
             LaunchedEffect(screen) {
                 val puzzle = withContext(Dispatchers.Default) {
